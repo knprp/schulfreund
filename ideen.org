@@ -1,0 +1,30 @@
+#+Author: Konstantin Preppner
+#+Title: Ideen für den 'Schulfreund'
+
+* Ideen
+** Fachbereiche
+*** Anbieten der relevanten Curricula
+    - Dann wäre es cool zu sagen, ab welchem Jahrgang es gilt
+*** Einstellen der relevanten Fach-Kompetenzen
+** Allgemeine Kompetenzen
+*** Selbstkompetenz
+    - z.B. Arbeitsverhalten
+    - z.B. Lernkompetenzen
+*** Sozialkompetenzen
+    - Teamfähigkeit
+*** Medienkompetenzen
+    - Nutzung von Teams, etc.
+** Darstellung
+*** bessere Übersicht über Gesamtentwicklung der SuS
+    - als Spinnennetz wie bei ProEvo wäre das super
+    - dann aber auch einzelne Bereiche so eingefärbt, dass man zwischen Fach- und pädagogischen Kompetenzen unterscheiden kann
+    - Integration von Bemerkungen zu den Kompetenzen der SuS
+*** auf der Startseite nicht nur anfallenden Unterricht anzeigen, sondern mehr relevante Informationen
+    - was muss heute erledigt werden (CalDav-Integration?)
+    - welche Schüler benötigen Aufmerksamkeit?
+    - *Pfeile*, wo Leistung noch oben, oder *nach unten* geht
+    - aber natürlich trotzdem auch der anstehende Unterricht
+*** Unterricht
+    - Titel
+    - sogar Zuweisung von Kompetenzen?
+    - Zuweisung zu Sequenzen wäre unendlich praktisch
