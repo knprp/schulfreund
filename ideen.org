@@ -2,11 +2,13 @@
 #+Title: Ideen für den 'Schulfreund'
 
 * Ideen
+
 ** Fachbereiche
 *** Anbieten der relevanten Curricula
     - Dann wäre es cool zu sagen, ab welchem Jahrgang es gilt
 *** Einstellen der relevanten Fach-Kompetenzen
-** Allgemeine Kompetenzen
+
+** Bereich für Allgemeine Kompetenzen
 *** Selbstkompetenz
     - z.B. Arbeitsverhalten
     - z.B. Lernkompetenzen
@@ -14,6 +16,7 @@
     - Teamfähigkeit
 *** Medienkompetenzen
     - Nutzung von Teams, etc.
+
 ** Darstellung
 *** bessere Übersicht über Gesamtentwicklung der SuS
     - als Spinnennetz wie bei ProEvo wäre das super
@@ -24,7 +27,50 @@
     - welche Schüler benötigen Aufmerksamkeit?
     - *Pfeile*, wo Leistung noch oben, oder *nach unten* geht
     - aber natürlich trotzdem auch der anstehende Unterricht
-*** Unterricht
+*** Unterricht - die einzelne Stunde
     - Titel
-    - sogar Zuweisung von Kompetenzen?
     - Zuweisung zu Sequenzen wäre unendlich praktisch
+**** Zuweisung von Kompetenzen
+     - Einerseits Zuweisung der Stunde einer Kompetenz
+      --> Dann könnte man hier sogar sagen, dass die für die Stunnde eingestellte Kompetenz Auswirkung / Rückwirkunge auf das Kompetenzniveau des Schülers hätte, mega
+     - Trotzdem aber auch die Möglichkeit, bei Auffälligkeiten  anklicken zu können, wenn ein S in einem Bereich besonders positiv oder negativ aufgefallen ist
+     - Zuweisung zu Sequenzen wäre unendlich praktisch
+*** Übersichtsseite für Klassen:
+    - Hier wie auf der Startseite die besonderen "Sorgenkinder" anzeigen lassen
+    - Trends
+    - die Noten mehrerer Halbjahre
+
+*** Noteneingabe
+    - verschiedene Kompetenzbereiche wären eigentlich viel besser als eigene Noten
+    - Standardkommentare ansonsten
+      --> z.B. für Stunden, bei denen eine Person nicht sichtbar ist, aber gearbeitet hat, oder gar nicht sichtbar gearbeitet hat + Button dafür, ob das Gespräch gesucht wurde
+    - die Standardkommentare können sich dann auch direkt auf die Kompetenzen auswirken
+      --> nicht mitarbeiten führt zu schlecchter Selbstkompetenz, gute Gruppenarbeit zu guter Sozialkompetenz
+
+
+** Umsetzung
+   - gegen Python sollte eigentlich nichts sprechen
+*** Klassen
+    1. Schüler-Klasse
+       - ID
+       - Name
+       - Klasse
+       - Standardsatz an Kompetenzen
+    2. Klassen-Klasse ODER Fach/Kursklasse
+       - ID
+       - Name
+       - wenn Kurs: welches Fach    ||| wenn Klasse: dann muss ich Unterricht in nem bestimmten Fach eintragen
+	                                PROBLEM: Gemischte Kurse: die  wären dann drei Klassen zugeordnet
+
+*** Import/Export-Funktion
+    - CVS-Import für Schülerdaten
+    - Import/Export von Sicherungen
+
+*** Verschlüsselung
+    - das ganze sollte verschlüsselt sein - sowohl die Sicherungen als auch die Daten generell, um unbefugten Zugriff zu erschweren
+    - geht das einfach per gpg?
+      --> dann müsste ich zunächst bei der Initialisierung einen Schlüssel erstellen, dann immer verschlüsseln und entschlüsseln --> keine Möglichkeit, das Programm einfach so zu beenden
+    - automatische Cloud-Synchronisation wäre natürlich auch geil
+
+
+Das wird megaaaaaaa :)
