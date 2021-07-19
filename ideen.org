@@ -19,7 +19,7 @@
 
 ** Darstellung
 *** bessere Übersicht über Gesamtentwicklung der SuS
-    - als Spinnennetz wie bei ProEvo wäre das super
+    - als Radar-Chart(aka Spider-Chart oder Cobweb-Chart) wäre das wirklich super fett! ([[https://github.com/benschneider/PyGnuplot][PyGnuplot]]) [[https://stackoverflow.com/questions/12709820/how-to-create-a-spider-plot-in-gnuplot][Beispiel bei SOF]]
     - dann aber auch einzelne Bereiche so eingefärbt, dass man zwischen Fach- und pädagogischen Kompetenzen unterscheiden kann
     - Integration von Bemerkungen zu den Kompetenzen der SuS
 *** auf der Startseite nicht nur anfallenden Unterricht anzeigen, sondern mehr relevante Informationen
