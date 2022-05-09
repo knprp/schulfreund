@@ -7,6 +7,7 @@
 *** Anbieten der relevanten Curricula
     - Dann wäre es cool zu sagen, ab welchem Jahrgang es gilt
 *** Einstellen der relevanten Fach-Kompetenzen
+- und dann z.B. Möglichkeiten der Analyse in Latein
 
 ** Bereich für Allgemeine Kompetenzen
 *** Selbstkompetenz
@@ -35,6 +36,10 @@
       --> Dann könnte man hier sogar sagen, dass die für die Stunnde eingestellte Kompetenz Auswirkung / Rückwirkunge auf das Kompetenzniveau des Schülers hätte, mega
      - Trotzdem aber auch die Möglichkeit, bei Auffälligkeiten  anklicken zu können, wenn ein S in einem Bereich besonders positiv oder negativ aufgefallen ist
      - Zuweisung zu Sequenzen wäre unendlich praktisch
+**** Hausaufgaben
+- Hausaufgaben müssen einfach eingegeben werden können
+- sie müssen bei der nächsten Stunde angezeigt werden
+- man muss auf der Seite der Schüler sehen können, wie oft es Hausaufgaben gab und wie oft sie davon vergessen wurden
 *** Übersichtsseite für Klassen:
     - Hier wie auf der Startseite die besonderen "Sorgenkinder" anzeigen lassen
     - Trends
@@ -50,6 +55,7 @@
 
 ** Umsetzung
    - gegen Python sollte eigentlich nichts sprechen
+   - ODER ich setze es als Emacs-Erweiterung in Elips um :D
 *** Klassen
     1. Schüler-Klasse
        - ID
