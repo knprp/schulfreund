@@ -44,6 +44,10 @@
     - Hier wie auf der Startseite die besonderen "Sorgenkinder" anzeigen lassen
     - Trends
     - die Noten mehrerer Halbjahre
+    - Filtermöglichkeit für verschiedene Dinge, z.B.
+      - schlechte Noten
+      - schlechte Form
+      - sehr gute Noten, etc
 
 *** Noteneingabe
     - verschiedene Kompetenzbereiche wären eigentlich viel besser als eigene Noten
