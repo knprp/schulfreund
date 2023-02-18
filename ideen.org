@@ -26,6 +26,8 @@
 *** auf der Startseite nicht nur anfallenden Unterricht anzeigen, sondern mehr relevante Informationen
     - was muss heute erledigt werden (CalDav-Integration?)
     - welche Schüler benötigen Aufmerksamkeit?
+      - hier könnte der Schuldfreund jeden Tag zwei Schüler vorschlagen, die man beobachten soll und über die man dann nachher nen kurzen Text schreiben soll
+      - am besten Schüler, die bislang kaum beobachtet oder benotet wurden
     - *Pfeile*, wo Leistung noch oben, oder *nach unten* geht
     - aber natürlich trotzdem auch der anstehende Unterricht
 *** Unterricht - die einzelne Stunde
