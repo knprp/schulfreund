@@ -21,6 +21,7 @@
 ** Darstellung
 *** bessere Übersicht über Gesamtentwicklung der SuS
     - als Radar-Chart(aka Spider-Chart oder Cobweb-Chart) wäre das wirklich super fett! ([[https://github.com/benschneider/PyGnuplot][PyGnuplot]]) [[https://stackoverflow.com/questions/12709820/how-to-create-a-spider-plot-in-gnuplot][Beispiel bei SOF]]
+      - Bei Qt: [[https://doc.qt.io/qt-6/qpolarchart.html][QPolarChart]]
     - dann aber auch einzelne Bereiche so eingefärbt, dass man zwischen Fach- und pädagogischen Kompetenzen unterscheiden kann
     - Integration von Bemerkungen zu den Kompetenzen der SuS
 *** auf der Startseite nicht nur anfallenden Unterricht anzeigen, sondern mehr relevante Informationen
@@ -42,6 +43,11 @@
 - Hausaufgaben müssen einfach eingegeben werden können
 - sie müssen bei der nächsten Stunde angezeigt werden
 - man muss auf der Seite der Schüler sehen können, wie oft es Hausaufgaben gab und wie oft sie davon vergessen wurden
+*** Sequenzen
+- Sequenzen sollten einsehbar
+- aus der letztjährigen Sequenz erstellt
+- veränderbar (dauerhaft oder nur als Kopie)
+- Stunden der Sequenz können dann dem Stundenplan zugeordnet werden, am besten per Drag&Drop
 *** Übersichtsseite für Klassen:
     - Hier wie auf der Startseite die besonderen "Sorgenkinder" anzeigen lassen
     - Trends
