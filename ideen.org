@@ -31,6 +31,10 @@
       - am besten Schüler, die bislang kaum beobachtet oder benotet wurden
     - *Pfeile*, wo Leistung noch oben, oder *nach unten* geht
     - aber natürlich trotzdem auch der anstehende Unterricht
+**** Kalendar-Ansicht
+- zeigt auf Monatsansicht alle wichtigen Termine (wie Klassenarbeiten und Tests)
+- klickt man auf einen Tag wird daneben die Tagesansicht geschaltet, wo man die einzelnen Stunden sieht
+  - natürlich ist hier der aktuelle Tag die Standardeinstellung
 *** Unterricht - die einzelne Stunde
     - Titel
     - Zuweisung zu Sequenzen wäre unendlich praktisch
@@ -67,7 +71,8 @@
 
 ** Umsetzung
    - gegen Python sollte eigentlich nichts sprechen
-   - ODER ich setze es als Emacs-Erweiterung in Elips um :D
+     - hier lässt sich mittlerweile auch mit QT gut arbeiten
+   - ODER ich setze es als Emacs-Erweiterung in Elisp um :D
 *** Klassen
     1. Schüler-Klasse
        - ID
