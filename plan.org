@@ -1,0 +1,5 @@
+#+Author: Konstantin Preppner
+#+Title: Plan, den Schulfreund umzusetzen
+
+1) Herumspielen mit dem QT-Designer/Creator, um ein Gefühl für eine mögliche GUI zu bekommen
+2) Testdaten erstellen, um anfangen zu können
