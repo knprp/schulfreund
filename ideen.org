@@ -38,6 +38,7 @@
 *** Unterricht - die einzelne Stunde
     - Titel
     - Zuweisung zu Sequenzen wäre unendlich praktisch
+    - und am Anfang muss die Anfangs-und Enddaten des Halbjahres eingeben, so dass man das nicht jedes Mal selbst eingeben muss
 **** Zuweisung von Kompetenzen
      - Einerseits Zuweisung der Stunde einer Kompetenz
       --> Dann könnte man hier sogar sagen, dass die für die Stunnde eingestellte Kompetenz Auswirkung / Rückwirkunge auf das Kompetenzniveau des Schülers hätte, mega
