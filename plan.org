@@ -1,5 +1,12 @@
 #+Author: Konstantin Preppner
 #+Title: Plan, den Schulfreund umzusetzen
 
-1) Herumspielen mit dem QT-Designer/Creator, um ein Gefühl für eine mögliche GUI zu bekommen
-2) Testdaten erstellen, um anfangen zu können
+* TODO Herumspielen mit dem QT-Designer/Creator, um ein Gefühl für eine mögliche GUI zu bekommen
+
+* TODO Als erstes eine Test-Datenbank erstellen, dann eine Eingabemaske dafür
+
+* TODO Sobald das geschehen ist, mit Kursen und Schülerdaten (Fake) herumspiele - hinzufügen, löschen, etc
+
+* TODO Testdaten erstellen, um anfangen zu können
+
+* TODO Alles weitere muss warten
