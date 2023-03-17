@@ -29,7 +29,9 @@
     - welche Schüler benötigen Aufmerksamkeit?
       - hier könnte der Schuldfreund jeden Tag zwei Schüler vorschlagen, die man beobachten soll und über die man dann nachher nen kurzen Text schreiben soll
       - am besten Schüler, die bislang kaum beobachtet oder benotet wurden
-    - *Pfeile*, wo Leistung noch oben, oder *nach unten* geht
+      - *Pfeile*, wo Leistung noch oben, oder *nach unten* geht
+      - hier muss dringend geschaut werden, _ob an dem Tag schon aktualisiert wurde_! Es sollte nur einmal berechnet werden
+      - einzelne Schüler müssen aus der Berechnung rausgenommen werden!
     - aber natürlich trotzdem auch der anstehende Unterricht
 **** Kalendar-Ansicht
 - zeigt auf Monatsansicht alle wichtigen Termine (wie Klassenarbeiten und Tests)
