@@ -24,6 +24,8 @@
       - Bei Qt: [[https://doc.qt.io/qt-6/qpolarchart.html][QPolarChart]]
     - dann aber auch einzelne Bereiche so eingefärbt, dass man zwischen Fach- und pädagogischen Kompetenzen unterscheiden kann
     - Integration von Bemerkungen zu den Kompetenzen der SuS
+    - Übersichtsdarstellung für die Rückmeldungen, die man gegeben hat
+      - vlt. unterschieden in Gespräche, Klassenarbeiten und Elternsprechtage
 *** auf der Startseite nicht nur anfallenden Unterricht anzeigen, sondern mehr relevante Informationen
     - was muss heute erledigt werden (CalDav-Integration?)
     - welche Schüler benötigen Aufmerksamkeit?
