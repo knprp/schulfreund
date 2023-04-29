@@ -26,6 +26,7 @@
     - Integration von Bemerkungen zu den Kompetenzen der SuS
     - Übersichtsdarstellung für die Rückmeldungen, die man gegeben hat
       - vlt. unterschieden in Gespräche, Klassenarbeiten und Elternsprechtage
+      - auf jeden Fall zu Elternsprechtagen -> Evtl. kann man auch woanders eintragen, wer alles an einem Elternsprechtag anwesend war
 *** auf der Startseite nicht nur anfallenden Unterricht anzeigen, sondern mehr relevante Informationen
     - was muss heute erledigt werden (CalDav-Integration?)
     - welche Schüler benötigen Aufmerksamkeit?
