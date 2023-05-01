@@ -73,6 +73,7 @@
       --> z.B. für Stunden, bei denen eine Person nicht sichtbar ist, aber gearbeitet hat, oder gar nicht sichtbar gearbeitet hat + Button dafür, ob das Gespräch gesucht wurde
     - die Standardkommentare können sich dann auch direkt auf die Kompetenzen auswirken
       --> nicht mitarbeiten führt zu schlecchter Selbstkompetenz, gute Gruppenarbeit zu guter Sozialkompetenz
+    - 4en und 5en in Tests und Arbeiten müssen dazu führen, dass in der nächsten Stunde nach einer Unterschrift gefragt wird
 
 
 ** Umsetzung
