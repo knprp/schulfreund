@@ -40,6 +40,8 @@
 - zeigt auf Monatsansicht alle wichtigen Termine (wie Klassenarbeiten und Tests)
 - klickt man auf einen Tag wird daneben die Tagesansicht geschaltet, wo man die einzelnen Stunden sieht
   - natürlich ist hier der aktuelle Tag die Standardeinstellung
+- einzelne Tage im Kalender müssen als Ganze auf abwesend gestellt werden können
+  - evtl. mit Möglichkeit, Vertretungskollegen einzutragen
 *** Unterricht - die einzelne Stunde
     - Titel
     - Zuweisung zu Sequenzen wäre unendlich praktisch
