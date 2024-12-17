@@ -169,16 +169,19 @@ class DatabaseManager:
                 )
             ''')
 
+            # Wiederkehrende Stunden
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS recurring_lessons (
                     id INTEGER PRIMARY KEY,
+                    course_id INTEGER NOT NULL,
                     weekday INTEGER NOT NULL,  -- 1 = Montag, 7 = Sonntag
                     time TEXT NOT NULL,
                     subject TEXT NOT NULL,
                     topic TEXT NOT NULL,
                     semester_start TEXT NOT NULL,
                     semester_end TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
                 )
             ''')
 
@@ -273,7 +276,7 @@ class DatabaseManager:
                     """INSERT INTO recurring_lessons 
                     (weekday, time, subject, topic, semester_start, semester_end, course_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (weekday, data['time'], data['subject'], data['topic'],
+                    (weekday, data['time'], data['subject'], "", # Leeres topic
                     semester['semester_start'], semester['semester_end'], data['course_id'])
                 )
                 recurring_id = cursor.lastrowid
@@ -289,13 +292,13 @@ class DatabaseManager:
                     (course_id, date, time, subject, topic)
                     VALUES (?, ?, ?, ?, ?)""",
                     (data['course_id'], data['date'], data['time'], 
-                    data['subject'], data['topic'])
+                    data['subject'], "")  # Leeres topic
                 )
                 return cursor.lastrowid
 
         except Exception as e:
             raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {str(e)}")
-        
+
     def create_recurring_lessons(self, recurring_id: int):
         """Erstellt alle Einzeltermine für eine wiederkehrende Stunde."""
         try:
@@ -323,7 +326,7 @@ class DatabaseManager:
                         current_date.strftime("%Y-%m-%d"),
                         recurring['time'],
                         recurring['subject'],
-                        recurring['topic'])
+                        "")  # Leeres topic
                     )
                 current_date += timedelta(days=1)
 
@@ -586,12 +589,17 @@ class DatabaseManager:
 
     def update_lesson(self, lesson_id: int, data: dict) -> None:
         """Aktualisiert eine Unterrichtsstunde."""
-        self.execute(
-            """UPDATE lessons 
-            SET date = ?, time = ?, subject = ?, topic = ? 
-            WHERE id = ?""",
-            (data['date'], data['time'], data['subject'], data['topic'], lesson_id)
-        )
+        try:
+            self.execute(
+                """UPDATE lessons 
+                SET course_id = ?, date = ?, time = ?, subject = ?
+                WHERE id = ?""",
+                (data['course_id'], data['date'], data['time'], 
+                data['subject'], lesson_id)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Aktualisieren der Stunde: {str(e)}")
+
 
     def update_competency(self, comp_id: int, data: dict) -> None:
         """Aktualisiert eine Kompetenz."""
@@ -692,8 +700,8 @@ class DatabaseManager:
         try:
             cursor = self.execute(
                 """SELECT id, name, type, subject 
-                FROM courses 
-                ORDER BY name"""
+                   FROM courses 
+                   ORDER BY name"""
             )
             return [dict(row) for row in cursor.fetchall()]
         except Exception as e:

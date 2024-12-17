@@ -1,7 +1,7 @@
 # src/views/dialogs/lesson_dialog.py
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                           QTimeEdit, QComboBox, QLineEdit, QDialogButtonBox,
+                           QTimeEdit, QComboBox, QDialogButtonBox,
                            QCheckBox, QCalendarWidget, QMessageBox)
 from PyQt6.QtCore import QTime, QDate, Qt
 
@@ -10,6 +10,7 @@ class LessonDialog(QDialog):
         super().__init__(parent)
         self.parent = parent
         self.selected_date = selected_date or QDate.currentDate()
+        self.subject_label = QLabel("-")  # Hier als Klassenattribut definieren
         self.setWindowTitle("Unterrichtsstunde hinzufügen")
         self.setup_ui()
         
@@ -17,10 +18,19 @@ class LessonDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Kurs/Klasse (Pflichtfeld)
-        layout.addWidget(QLabel("Kurs/Klasse:*"))
+        course_layout = QHBoxLayout()
+        course_layout.addWidget(QLabel("Kurs/Klasse:*"))
         self.course = QComboBox()
+        self.course.currentIndexChanged.connect(self.update_subject_display)
         self.load_courses()
-        layout.addWidget(self.course)
+        course_layout.addWidget(self.course)
+        layout.addLayout(course_layout)
+        
+        # Anzeige des Fachs
+        subject_layout = QHBoxLayout()
+        subject_layout.addWidget(QLabel("Fach:"))
+        subject_layout.addWidget(self.subject_label)  # Verwenden des Klassenattributs
+        layout.addLayout(subject_layout)
 
         # Datum
         layout.addWidget(QLabel("Datum:"))
@@ -30,22 +40,13 @@ class LessonDialog(QDialog):
         layout.addWidget(self.calendar)
 
         # Uhrzeit
-        layout.addWidget(QLabel("Uhrzeit:"))
+        time_layout = QHBoxLayout()
+        time_layout.addWidget(QLabel("Uhrzeit:"))
         self.time = QTimeEdit()
         self.time.setDisplayFormat("HH:mm")
         self.time.setTime(QTime(8, 0))  # Standard: 8:00 Uhr
-        layout.addWidget(self.time)
-
-        # Fach
-        layout.addWidget(QLabel("Fach:"))
-        self.subject = QComboBox()
-        self.subject.addItems(["Mathematik", "Deutsch", "Englisch", "Geschichte"])
-        layout.addWidget(self.subject)
-
-        # Thema
-        layout.addWidget(QLabel("Thema:"))
-        self.topic = QLineEdit()
-        layout.addWidget(self.topic)
+        time_layout.addWidget(self.time)
+        layout.addLayout(time_layout)
 
         # Checkbox für wiederkehrende Termine
         self.recurring_checkbox = QCheckBox("Im gesamten Halbjahr wiederholen")
@@ -72,24 +73,35 @@ class LessonDialog(QDialog):
             'is_recurring': self.recurring_checkbox.isChecked()
         }
 
-
-
     def load_courses(self):
         """Lädt alle verfügbaren Kurse/Klassen"""
         try:
             courses = self.parent.db.get_all_courses()
             self.course.clear()
+            self.course.addItem("Bitte wählen...", None)  # Standardauswahl
             for course in courses:
-                # Zeige Name und Typ des Kurses
                 display_text = f"{course['name']} ({course['type']})"
-                self.course.addItem(display_text, course['id'])
+                self.course.addItem(display_text, course)  # Speichere das gesamte course dict
+            self.update_subject_display()  # Initiales Update
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Kurse: {str(e)}")
 
+    def update_subject_display(self):
+        """Aktualisiert die Anzeige des Fachs basierend auf der Kursauswahl"""
+        course_data = self.course.currentData()
+        if course_data and course_data.get('subject'):
+            self.subject_label.setText(course_data['subject'])
+        else:
+            self.subject_label.setText("-")
+
     def validate_and_accept(self):
         """Prüft die Eingaben vor dem Akzeptieren"""
-        if self.course.currentData() is None:
+        course_data = self.course.currentData()
+        if not course_data:
             QMessageBox.warning(self, "Fehler", "Bitte wählen Sie einen Kurs/eine Klasse aus!")
+            return
+        if not course_data.get('subject'):
+            QMessageBox.warning(self, "Fehler", "Der gewählte Kurs hat kein zugeordnetes Fach!")
             return
         self.accept()
 
@@ -153,11 +165,11 @@ class LessonDialog(QDialog):
 
     def get_data(self):
         """Gibt die eingegebenen Daten zurück"""
+        course_data = self.course.currentData()
         return {
-            'course_id': self.course.currentData(),
+            'course_id': course_data['id'],
             'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
             'time': self.time.time().toString("HH:mm"),
-            'subject': self.subject.currentText(),
-            'topic': self.topic.text(),
+            'subject': course_data['subject'],  # Fach kommt jetzt aus dem Kurs
             'is_recurring': self.recurring_checkbox.isChecked()
         }

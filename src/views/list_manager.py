@@ -2,7 +2,7 @@
 
 from PyQt6.QtGui import QStandardItemModel, QStandardItem
 from PyQt6.QtWidgets import QMessageBox, QMenu
-from PyQt6.QtCore import Qt, QTime
+from PyQt6.QtCore import Qt, QTime, QDate
 from datetime import datetime, timedelta
 from src.views.dialogs.lesson_dialog import LessonDialog
 
@@ -151,27 +151,31 @@ class ListManager:
                 self.delete_lesson(lesson_id)
 
     def edit_lesson(self, lesson_id):
+        """Bearbeitet eine existierende Unterrichtsstunde"""
         try:
             lesson = self.parent.db.get_lesson(lesson_id)
             if lesson:
-                dialog = LessonDialog(self.parent, self.parent.calendarWidget.selectedDate())
+                dialog = LessonDialog(self.parent, QDate.fromString(lesson['date'], "yyyy-MM-dd"))
                 
-                # Kurs über course_id setzen
-                index = dialog.course.findData(lesson['course_id'])
-                if index >= 0:
-                    dialog.course.setCurrentIndex(index)
-                    
+                # Setze den korrekten Kurs
+                for i in range(dialog.course.count()):
+                    course_data = dialog.course.itemData(i)
+                    if course_data and course_data.get('id') == lesson['course_id']:
+                        dialog.course.setCurrentIndex(i)
+                        break
+                
+                # Setze die Uhrzeit
                 dialog.time.setTime(QTime.fromString(lesson['time'], "HH:mm"))
-                dialog.subject.setText(lesson['subject'])
-                dialog.topic.setText(lesson['topic'])
                 
                 if dialog.exec():
                     updated_data = dialog.get_data()
                     self.parent.db.update_lesson(lesson_id, updated_data)
                     self.update_day_list(self.parent.calendarWidget.selectedDate())
                     self.parent.statusBar().showMessage(f"Unterrichtsstunde wurde aktualisiert", 3000)
+                    
         except Exception as e:
             QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Bearbeiten: {str(e)}")
+
 
     def delete_lesson(self, lesson_id):
         msg = QMessageBox()
