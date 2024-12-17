@@ -2,7 +2,7 @@
 
 import sqlite3
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta  # timedelta hier hinzugefügt
 
 class DatabaseManager:
     def __init__(self, db_file: str = "school.db"):
@@ -168,6 +168,35 @@ class DatabaseManager:
                     notes TEXT  -- Optional für Anmerkungen
                 )
             ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS recurring_lessons (
+                    id INTEGER PRIMARY KEY,
+                    weekday INTEGER NOT NULL,  -- 1 = Montag, 7 = Sonntag
+                    time TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    topic TEXT NOT NULL,
+                    semester_start TEXT NOT NULL,
+                    semester_end TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('DROP TABLE IF EXISTS recurring_lessons')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS recurring_lessons (
+                    id INTEGER PRIMARY KEY,
+                    course_id INTEGER NOT NULL,
+                    weekday INTEGER NOT NULL,  -- 1 = Montag, 7 = Sonntag
+                    time TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    topic TEXT NOT NULL,
+                    semester_start TEXT NOT NULL,
+                    semester_end TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+                )
+            ''')
             
             self.conn.commit()
                     
@@ -223,17 +252,83 @@ class DatabaseManager:
             (student_id,)
         )
 
-    # Unterrichtsstunden-bezogene Methoden
     def add_lesson(self, data: dict) -> int:
         """Fügt eine neue Unterrichtsstunde hinzu."""
         try:
+            if not data.get('course_id'):
+                raise ValueError("Eine Unterrichtsstunde muss einem Kurs zugeordnet sein")
+
+            if data.get('is_recurring'):
+                # Hole das aktuelle Halbjahr
+                semester = self.get_semester_dates()
+                if not semester:
+                    raise ValueError("Kein aktives Halbjahr gefunden")
+
+                # Bestimme den Wochentag (1-7, wobei 1=Montag)
+                lesson_date = datetime.strptime(data['date'], "%Y-%m-%d")
+                weekday = lesson_date.isoweekday()
+
+                # Füge wiederkehrende Stunde hinzu
+                cursor = self.execute(
+                    """INSERT INTO recurring_lessons 
+                    (weekday, time, subject, topic, semester_start, semester_end, course_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (weekday, data['time'], data['subject'], data['topic'],
+                    semester['semester_start'], semester['semester_end'], data['course_id'])
+                )
+                recurring_id = cursor.lastrowid
+
+                # Erstelle alle Einzeltermine für dieses Halbjahr
+                self.create_recurring_lessons(recurring_id)
+                
+                return recurring_id
+            else:
+                # Normale einzelne Unterrichtsstunde
+                cursor = self.execute(
+                    """INSERT INTO lessons 
+                    (course_id, date, time, subject, topic)
+                    VALUES (?, ?, ?, ?, ?)""",
+                    (data['course_id'], data['date'], data['time'], 
+                    data['subject'], data['topic'])
+                )
+                return cursor.lastrowid
+
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {str(e)}")
+        
+    def create_recurring_lessons(self, recurring_id: int):
+        """Erstellt alle Einzeltermine für eine wiederkehrende Stunde."""
+        try:
+            # Hole die wiederkehrende Stunde
             cursor = self.execute(
-                "INSERT INTO lessons (date, time, subject, topic) VALUES (?, ?, ?, ?)",
-                (data['date'], data['time'], data['subject'], data['topic'])
+                "SELECT * FROM recurring_lessons WHERE id = ?",
+                (recurring_id,)
             )
-            return cursor.lastrowid
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {e}")
+            recurring = cursor.fetchone()
+            if not recurring:
+                return
+
+            # Erstelle Termine für jeden passenden Wochentag im Halbjahr
+            start_date = datetime.strptime(recurring['semester_start'], "%Y-%m-%d")
+            end_date = datetime.strptime(recurring['semester_end'], "%Y-%m-%d")
+            
+            current_date = start_date
+            while current_date <= end_date:
+                if current_date.isoweekday() == recurring['weekday']:
+                    self.execute(
+                        """INSERT INTO lessons 
+                        (course_id, date, time, subject, topic)
+                        VALUES (?, ?, ?, ?, ?)""",
+                        (recurring['course_id'],
+                        current_date.strftime("%Y-%m-%d"),
+                        recurring['time'],
+                        recurring['subject'],
+                        recurring['topic'])
+                    )
+                current_date += timedelta(days=1)
+
+        except Exception as e:
+            raise Exception(f"Fehler beim Erstellen der wiederkehrenden Termine: {str(e)}")
 
     def get_lessons_by_date(self, date: str) -> List[Dict[str, Any]]:
         """Holt alle Unterrichtsstunden für ein bestimmtes Datum."""
@@ -532,27 +627,6 @@ class DatabaseManager:
             raise Exception(f"Fehler beim Löschen der Kompetenz: {e}")
 
 
-    def add_lesson(self, data: dict) -> int:
-        """Fügt eine neue Unterrichtsstunde hinzu."""
-        try:
-            cursor = self.execute(
-                """INSERT INTO lessons 
-                    (course_id, date, time, subject, topic) 
-                    VALUES (?, ?, ?, ?, ?)""",
-                (data['course_id'], data['date'], data['time'], 
-                    data['subject'], data['topic'])
-            )
-            lesson_id = cursor.lastrowid
-            
-            # Kompetenzen zuordnen
-            if 'competencies' in data:
-                for comp_id in data['competencies']:
-                    self.add_lesson_competency(lesson_id, comp_id)
-                    
-            return lesson_id
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {e}")
-
     def get_lesson(self, lesson_id: int) -> dict:
         """Holt eine einzelne Unterrichtsstunde mit Kursinformationen."""
         cursor = self.execute(
@@ -611,3 +685,16 @@ class DatabaseManager:
             "DELETE FROM semester_history WHERE id = ?",
             (semester_id,)
         )
+
+
+    def get_all_courses(self) -> list:
+        """Holt alle verfügbaren Kurse und Klassen."""
+        try:
+            cursor = self.execute(
+                """SELECT id, name, type, subject 
+                FROM courses 
+                ORDER BY name"""
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Kurse: {str(e)}")

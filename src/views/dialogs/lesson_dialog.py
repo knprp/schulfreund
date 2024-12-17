@@ -1,72 +1,58 @@
 # src/views/dialogs/lesson_dialog.py
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QComboBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QDialogButtonBox, QCalendarWidget, QTimeEdit, QMessageBox
-)
-from PyQt6.QtCore import Qt, QTime
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+                           QTimeEdit, QComboBox, QLineEdit, QDialogButtonBox,
+                           QCheckBox, QCalendarWidget, QMessageBox)
+from PyQt6.QtCore import QTime, QDate, Qt
 
 class LessonDialog(QDialog):
     def __init__(self, parent=None, selected_date=None):
         super().__init__(parent)
         self.parent = parent
+        self.selected_date = selected_date or QDate.currentDate()
         self.setWindowTitle("Unterrichtsstunde hinzufügen")
-        self.setup_ui(selected_date)
-
-    def setup_ui(self, selected_date):
+        self.setup_ui()
+        
+    def setup_ui(self):
         layout = QVBoxLayout(self)
 
-        # Kursauswahl (NEU!)
+        # Kurs/Klasse (Pflichtfeld)
         layout.addWidget(QLabel("Kurs/Klasse:*"))
         self.course = QComboBox()
         self.load_courses()
         layout.addWidget(self.course)
 
         # Datum
-        layout.addWidget(QLabel("Datum:*"))
-        self.date = QCalendarWidget()
-        if selected_date:
-            self.date.setSelectedDate(selected_date)
-        layout.addWidget(self.date)
+        layout.addWidget(QLabel("Datum:"))
+        self.calendar = QCalendarWidget()
+        if self.selected_date:
+            self.calendar.setSelectedDate(self.selected_date)
+        layout.addWidget(self.calendar)
 
         # Uhrzeit
-        layout.addWidget(QLabel("Uhrzeit:*"))
+        layout.addWidget(QLabel("Uhrzeit:"))
         self.time = QTimeEdit()
         self.time.setDisplayFormat("HH:mm")
         self.time.setTime(QTime(8, 0))  # Standard: 8:00 Uhr
         layout.addWidget(self.time)
 
-        # Fach wird aus dem Kurs übernommen
-        layout.addWidget(QLabel("Fach:*"))
-        self.subject = QLineEdit()
-        self.subject.setReadOnly(True)  # Wird automatisch aus Kurs gefüllt
+        # Fach
+        layout.addWidget(QLabel("Fach:"))
+        self.subject = QComboBox()
+        self.subject.addItems(["Mathematik", "Deutsch", "Englisch", "Geschichte"])
         layout.addWidget(self.subject)
 
         # Thema
-        layout.addWidget(QLabel("Thema:*"))
+        layout.addWidget(QLabel("Thema:"))
         self.topic = QLineEdit()
         layout.addWidget(self.topic)
 
-        # Kompetenzen
-        layout.addWidget(QLabel("Kompetenzen:"))
-        self.competencies_table = QTableWidget()
-        self.competencies_table.setColumnCount(4)
-        self.competencies_table.setHorizontalHeaderLabels(['ID', 'Fach', 'Bereich', 'Beschreibung'])
-        layout.addWidget(self.competencies_table)
+        # Checkbox für wiederkehrende Termine
+        self.recurring_checkbox = QCheckBox("Im gesamten Halbjahr wiederholen")
+        layout.addWidget(self.recurring_checkbox)
 
-        # Kompetenzauswahl
-        self.comp_select = QComboBox()
-        self.selected_competencies = []
-        self.load_competencies()
-
-        # Buttons für Kompetenzauswahl
-        select_layout = QHBoxLayout()
-        select_layout.addWidget(self.comp_select)
-        btn_add_comp = QPushButton("Kompetenz hinzufügen")
-        btn_add_comp.clicked.connect(self.add_competency)
-        select_layout.addWidget(btn_add_comp)
-        layout.addLayout(select_layout)
+        # Pflichtfeld-Hinweis
+        layout.addWidget(QLabel("* Pflichtfeld"))
 
         # Dialog-Buttons
         buttons = QDialogButtonBox(
@@ -76,24 +62,37 @@ class LessonDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        # Kursauswahl mit Subject-Update verbinden
-        self.course.currentIndexChanged.connect(self.update_subject)
+    def get_data(self):
+        """Gibt die eingegebenen Daten zurück"""
+        return {
+            'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
+            'time': self.time.time().toString("HH:mm"),
+            'subject': self.subject.currentText(),
+            'topic': self.topic.text(),
+            'is_recurring': self.recurring_checkbox.isChecked()
+        }
+
+
 
     def load_courses(self):
+        """Lädt alle verfügbaren Kurse/Klassen"""
         try:
-            courses = self.parent.db.execute(
-                "SELECT id, name, subject FROM courses ORDER BY name"
-            ).fetchall()
-            
-            self.courses_data = courses  # Speichern für späteren Zugriff
+            courses = self.parent.db.get_all_courses()
             self.course.clear()
-            self.course.addItem("Bitte wählen...", None)
-            
             for course in courses:
-                display_text = f"{course['name']} ({course['subject'] or 'Kein Fach'})"
+                # Zeige Name und Typ des Kurses
+                display_text = f"{course['name']} ({course['type']})"
                 self.course.addItem(display_text, course['id'])
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Kurse: {str(e)}")
+
+    def validate_and_accept(self):
+        """Prüft die Eingaben vor dem Akzeptieren"""
+        if self.course.currentData() is None:
+            QMessageBox.warning(self, "Fehler", "Bitte wählen Sie einen Kurs/eine Klasse aus!")
+            return
+        self.accept()
+
 
     def update_subject(self, index):
         if index <= 0:  # "Bitte wählen..." oder ungültig
@@ -140,22 +139,25 @@ class LessonDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Fehler", f"Fehler beim Hinzufügen der Kompetenz: {str(e)}")
 
-    def validate_and_accept(self):
-        if not self.course.currentData():
-            QMessageBox.warning(self, "Fehler", "Bitte wählen Sie einen Kurs aus.")
-            return
-        if not self.topic.text().strip():
-            QMessageBox.warning(self, "Fehler", "Bitte geben Sie ein Thema ein.")
-            return
-            
-        self.accept()
+    def get_all_courses(self) -> list:
+        """Holt alle verfügbaren Kurse und Klassen."""
+        try:
+            cursor = self.execute(
+                """SELECT id, name, type, subject 
+                FROM courses 
+                ORDER BY name"""
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Kurse: {str(e)}")
 
-    def get_data(self) -> dict:
+    def get_data(self):
+        """Gibt die eingegebenen Daten zurück"""
         return {
             'course_id': self.course.currentData(),
-            'date': self.date.selectedDate().toString("yyyy-MM-dd"),
+            'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
             'time': self.time.time().toString("HH:mm"),
-            'subject': self.subject.text(),
-            'topic': self.topic.text().strip(),
-            'competencies': [comp[0] for comp in self.selected_competencies]
+            'subject': self.subject.currentText(),
+            'topic': self.topic.text(),
+            'is_recurring': self.recurring_checkbox.isChecked()
         }
