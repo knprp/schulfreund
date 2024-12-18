@@ -6,13 +6,17 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import QTime, QDate, Qt
 
 class LessonDialog(QDialog):
-    def __init__(self, parent=None, selected_date=None):
+    def __init__(self, parent=None, selected_date=None, lesson=None):  # lesson als Parameter hinzugefügt
         super().__init__(parent)
         self.parent = parent
         self.selected_date = selected_date or QDate.currentDate()
-        self.subject_label = QLabel("-")  # Hier als Klassenattribut definieren
-        self.setWindowTitle("Unterrichtsstunde hinzufügen")
+        self.lesson = lesson  # Speichern der übergebenen Stunde
+        self.subject_label = QLabel("-")
+        self.setWindowTitle("Stunde bearbeiten" if lesson else "Stunde hinzufügen")
         self.setup_ui()
+        
+        if lesson:  # Wenn eine Stunde übergeben wurde, lade ihre Daten
+            self.load_lesson_data()
         
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -47,10 +51,15 @@ class LessonDialog(QDialog):
         self.time.setTime(QTime(8, 0))  # Standard: 8:00 Uhr
         time_layout.addWidget(self.time)
         layout.addLayout(time_layout)
-
-        # Checkbox für wiederkehrende Termine
-        self.recurring_checkbox = QCheckBox("Im gesamten Halbjahr wiederholen")
-        layout.addWidget(self.recurring_checkbox)
+        # Checkbox für wiederkehrende Termine - nur beim Erstellen
+        if not self.lesson:
+            self.recurring_checkbox = QCheckBox("Im gesamten Halbjahr wiederholen")
+            layout.addWidget(self.recurring_checkbox)
+        
+        # Checkbox für "Alle folgenden auch ändern" - nur beim Bearbeiten
+        elif self.lesson.get('recurring_hash'):
+            self.update_following_checkbox = QCheckBox("Alle folgenden Stunden auch ändern")
+            layout.addWidget(self.update_following_checkbox)
 
         # Pflichtfeld-Hinweis
         layout.addWidget(QLabel("* Pflichtfeld"))
@@ -63,33 +72,27 @@ class LessonDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def get_data(self):
-        """Gibt die eingegebenen Daten zurück"""
-        return {
-            'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
-            'time': self.time.time().toString("HH:mm"),
-            'subject': self.subject.currentText(),
-            'topic': self.topic.text(),
-            'is_recurring': self.recurring_checkbox.isChecked()
-        }
-
     def load_courses(self):
         """Lädt alle verfügbaren Kurse/Klassen"""
         try:
+            print("Loading courses...") # Debug
             courses = self.parent.db.get_all_courses()
+            print(f"Found courses: {courses}")  # Debug
             self.course.clear()
             self.course.addItem("Bitte wählen...", None)  # Standardauswahl
             for course in courses:
                 display_text = f"{course['name']} ({course['type']})"
-                self.course.addItem(display_text, course)  # Speichere das gesamte course dict
-            self.update_subject_display()  # Initiales Update
+                print(f"Adding course: {display_text}")  # Debug
+                self.course.addItem(display_text, course)
+            self.update_subject_display()
         except Exception as e:
+            print(f"Error: {e}")  # Debug
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Kurse: {str(e)}")
 
     def update_subject_display(self):
         """Aktualisiert die Anzeige des Fachs basierend auf der Kursauswahl"""
         course_data = self.course.currentData()
-        if course_data and course_data.get('subject'):
+        if course_data and isinstance(course_data, dict) and course_data.get('subject'):
             self.subject_label.setText(course_data['subject'])
         else:
             self.subject_label.setText("-")
@@ -163,13 +166,39 @@ class LessonDialog(QDialog):
         except Exception as e:
             raise Exception(f"Fehler beim Abrufen der Kurse: {str(e)}")
 
+    def load_lesson_data(self):
+        """Lädt die Daten einer existierenden Stunde in den Dialog"""
+        # Setze den korrekten Kurs
+        for i in range(self.course.count()):
+            course_data = self.course.itemData(i)
+            if course_data and course_data.get('id') == self.lesson['course_id']:
+                self.course.setCurrentIndex(i)
+                break
+
+        # Setze Datum
+        self.calendar.setSelectedDate(QDate.fromString(self.lesson['date'], "yyyy-MM-dd"))
+        
+        # Setze Uhrzeit
+        self.time.setTime(QTime.fromString(self.lesson['time'], "HH:mm"))
+
     def get_data(self):
         """Gibt die eingegebenen Daten zurück"""
         course_data = self.course.currentData()
-        return {
+        if not course_data:  # Sicherheitscheck
+            raise ValueError("Kein Kurs ausgewählt")
+            
+        data = {
             'course_id': course_data['id'],
             'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
             'time': self.time.time().toString("HH:mm"),
-            'subject': course_data['subject'],  # Fach kommt jetzt aus dem Kurs
-            'is_recurring': self.recurring_checkbox.isChecked()
+            'subject': course_data['subject'],
         }
+        
+        # Beim Erstellen einer neuen Stunde
+        if not self.lesson:
+            data['is_recurring'] = self.recurring_checkbox.isChecked()
+        # Beim Bearbeiten einer wiederkehrenden Stunde
+        elif self.lesson.get('recurring_hash'):
+            data['update_all_following'] = self.update_following_checkbox.isChecked()
+            
+        return data

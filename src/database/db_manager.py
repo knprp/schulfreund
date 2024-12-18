@@ -44,19 +44,6 @@ class DatabaseManager:
                 )
         ''')
             
-                    # Unterrichtsstunden Tabelle mit course_id
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS lessons (
-                    id INTEGER PRIMARY KEY,
-                    course_id INTEGER NOT NULL,
-                    date TEXT NOT NULL,
-                    time TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    topic TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
-                )
-            ''')
             
             # Noten Tabelle mit Foreign Keys
             cursor.execute('''
@@ -143,20 +130,6 @@ class DatabaseManager:
                 )
             ''')
             
-            # Unterrichtsstunden müssen einem Kurs zugeordnet sein
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS lessons (
-                    id INTEGER PRIMARY KEY,
-                    course_id INTEGER NOT NULL,
-                    date TEXT NOT NULL,
-                    time TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    topic TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
-                )
-            ''')
-
             # Neue Tabelle für Halbjahreshistorie
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS semester_history (
@@ -168,41 +141,22 @@ class DatabaseManager:
                     notes TEXT  -- Optional für Anmerkungen
                 )
             ''')
-
-            # Wiederkehrende Stunden
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS recurring_lessons (
-                    id INTEGER PRIMARY KEY,
-                    course_id INTEGER NOT NULL,
-                    weekday INTEGER NOT NULL,  -- 1 = Montag, 7 = Sonntag
-                    time TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    topic TEXT NOT NULL,
-                    semester_start TEXT NOT NULL,
-                    semester_end TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
-                )
-            ''')
-
-            cursor.execute('DROP TABLE IF EXISTS recurring_lessons')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS recurring_lessons (
-                    id INTEGER PRIMARY KEY,
-                    course_id INTEGER NOT NULL,
-                    weekday INTEGER NOT NULL,  -- 1 = Montag, 7 = Sonntag
-                    time TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    topic TEXT NOT NULL,
-                    semester_start TEXT NOT NULL,
-                    semester_end TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
-                )
-            ''')
             
-            self.conn.commit()
-                    
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS lessons (
+                    id INTEGER PRIMARY KEY,
+                    course_id INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    time TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    topic TEXT NOT NULL,
+                    recurring_hash TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+                )
+            ''')
+            self.conn.commit()               
         except sqlite3.Error as e:
             raise Exception(f"Fehler beim Erstellen der Tabellen: {e}")
 
@@ -255,83 +209,81 @@ class DatabaseManager:
             (student_id,)
         )
 
-    def add_lesson(self, data: dict) -> int:
-        """Fügt eine neue Unterrichtsstunde hinzu."""
+    def add_lesson(self, data: dict) -> int or list:
+        """Fügt eine neue Unterrichtsstunde oder wiederkehrende Stunden hinzu.
+        
+        Args:
+            data: Dictionary mit:
+                - course_id: ID des Kurses
+                - date: Datum im Format "YYYY-MM-DD"
+                - time: Uhrzeit im Format "HH:MM"
+                - subject: Fach
+                - is_recurring: Bool, ob wiederkehrend
+                
+        Returns:
+            Bei Einzelstunde: ID der neuen Stunde
+            Bei wiederkehrenden Stunden: Liste der IDs aller erstellten Stunden
+        """
         try:
             if not data.get('course_id'):
                 raise ValueError("Eine Unterrichtsstunde muss einem Kurs zugeordnet sein")
 
             if data.get('is_recurring'):
-                # Hole das aktuelle Halbjahr
+                # Semesterdaten holen
                 semester = self.get_semester_dates()
                 if not semester:
                     raise ValueError("Kein aktives Halbjahr gefunden")
 
-                # Bestimme den Wochentag (1-7, wobei 1=Montag)
-                lesson_date = datetime.strptime(data['date'], "%Y-%m-%d")
-                weekday = lesson_date.isoweekday()
-
-                # Füge wiederkehrende Stunde hinzu
-                cursor = self.execute(
-                    """INSERT INTO recurring_lessons 
-                    (weekday, time, subject, topic, semester_start, semester_end, course_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (weekday, data['time'], data['subject'], "", # Leeres topic
-                    semester['semester_start'], semester['semester_end'], data['course_id'])
-                )
-                recurring_id = cursor.lastrowid
-
-                # Erstelle alle Einzeltermine für dieses Halbjahr
-                self.create_recurring_lessons(recurring_id)
+                # Wochentag bestimmen
+                start_date = datetime.strptime(data['date'], "%Y-%m-%d")
+                weekday = start_date.isoweekday()
                 
-                return recurring_id
+                # Hash generieren
+                rec_hash = self.generate_recurring_hash(
+                    data['course_id'], 
+                    weekday, 
+                    data['time']
+                )
+                
+                # Alle Termine bis Semesterende erstellen
+                lesson_ids = []
+                current_date = start_date
+                end_date = datetime.strptime(semester['semester_end'], "%Y-%m-%d")
+                
+                while current_date <= end_date:
+                    if current_date.isoweekday() == weekday:
+                        cursor = self.execute(
+                            """INSERT INTO lessons 
+                            (course_id, date, time, subject, topic, recurring_hash)
+                            VALUES (?, ?, ?, ?, ?, ?)""",
+                            (data['course_id'],
+                            current_date.strftime("%Y-%m-%d"),
+                            data['time'],
+                            data['subject'],
+                            data.get('topic', ''),
+                            rec_hash)
+                        )
+                        lesson_ids.append(cursor.lastrowid)
+                    current_date += timedelta(days=1)
+                
+                return lesson_ids
+
             else:
                 # Normale einzelne Unterrichtsstunde
                 cursor = self.execute(
                     """INSERT INTO lessons 
                     (course_id, date, time, subject, topic)
                     VALUES (?, ?, ?, ?, ?)""",
-                    (data['course_id'], data['date'], data['time'], 
-                    data['subject'], "")  # Leeres topic
+                    (data['course_id'], 
+                    data['date'], 
+                    data['time'], 
+                    data['subject'],
+                    data.get('topic', ''))
                 )
                 return cursor.lastrowid
 
         except Exception as e:
             raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {str(e)}")
-
-    def create_recurring_lessons(self, recurring_id: int):
-        """Erstellt alle Einzeltermine für eine wiederkehrende Stunde."""
-        try:
-            # Hole die wiederkehrende Stunde
-            cursor = self.execute(
-                "SELECT * FROM recurring_lessons WHERE id = ?",
-                (recurring_id,)
-            )
-            recurring = cursor.fetchone()
-            if not recurring:
-                return
-
-            # Erstelle Termine für jeden passenden Wochentag im Halbjahr
-            start_date = datetime.strptime(recurring['semester_start'], "%Y-%m-%d")
-            end_date = datetime.strptime(recurring['semester_end'], "%Y-%m-%d")
-            
-            current_date = start_date
-            while current_date <= end_date:
-                if current_date.isoweekday() == recurring['weekday']:
-                    self.execute(
-                        """INSERT INTO lessons 
-                        (course_id, date, time, subject, topic)
-                        VALUES (?, ?, ?, ?, ?)""",
-                        (recurring['course_id'],
-                        current_date.strftime("%Y-%m-%d"),
-                        recurring['time'],
-                        recurring['subject'],
-                        "")  # Leeres topic
-                    )
-                current_date += timedelta(days=1)
-
-        except Exception as e:
-            raise Exception(f"Fehler beim Erstellen der wiederkehrenden Termine: {str(e)}")
 
     def get_lessons_by_date(self, date: str) -> List[Dict[str, Any]]:
         """Holt alle Unterrichtsstunden für ein bestimmtes Datum."""
@@ -587,18 +539,78 @@ class DatabaseManager:
         result = cursor.fetchone()
         return dict(result) if result else None
 
-    def update_lesson(self, lesson_id: int, data: dict) -> None:
-        """Aktualisiert eine Unterrichtsstunde."""
+    def update_lesson(self, lesson_id: int, data: dict, update_all_following: bool = False) -> List[int]:
+        """Aktualisiert eine oder mehrere Unterrichtsstunden.
+        
+        Args:
+            lesson_id: ID der zu ändernden Stunde
+            data: Dictionary mit den neuen Daten (course_id, date, time, subject, topic)
+            update_all_following: Bool, ob alle folgenden Stunden auch geändert werden sollen
+            
+        Returns:
+            Liste der IDs aller geänderten Stunden
+        """
         try:
-            self.execute(
-                """UPDATE lessons 
-                SET course_id = ?, date = ?, time = ?, subject = ?
-                WHERE id = ?""",
-                (data['course_id'], data['date'], data['time'], 
-                data['subject'], lesson_id)
-            )
+            # Aktuelle Stunde und deren Hash holen
+            current_lesson = self.get_lesson(lesson_id)
+            if not current_lesson:
+                raise ValueError("Stunde nicht gefunden")
+                
+            if update_all_following and current_lesson['recurring_hash']:
+                # Aktualisiere alle folgenden Stunden mit gleichem Hash
+                update_fields = []
+                values = []
+                for key, value in data.items():
+                    if key not in ['id', 'created_at', 'date']:  # date nicht ändern!
+                        update_fields.append(f"{key} = ?")
+                        values.append(value)
+                
+                # Füge WHERE-Klausel Parameter hinzu
+                values.extend([
+                    current_lesson['recurring_hash'],
+                    current_lesson['date']  # Nur Stunden ab dem aktuellen Datum
+                ])
+                
+                query = f"""
+                    UPDATE lessons 
+                    SET {', '.join(update_fields)}
+                    WHERE recurring_hash = ?
+                    AND date >= ?
+                """
+                
+                self.execute(query, tuple(values))
+                
+                # Hole IDs aller geänderten Stunden
+                cursor = self.execute(
+                    """SELECT id FROM lessons 
+                    WHERE recurring_hash = ? 
+                    AND date >= ?""",
+                    (current_lesson['recurring_hash'], 
+                    current_lesson['date'])
+                )
+                return [row['id'] for row in cursor.fetchall()]
+                
+            else:
+                # Nur einzelne Stunde aktualisieren
+                update_fields = []
+                values = []
+                for key, value in data.items():
+                    if key not in ['id', 'created_at', 'recurring_hash']:
+                        update_fields.append(f"{key} = ?")
+                        values.append(value)
+                
+                values.append(lesson_id)
+                query = f"""
+                    UPDATE lessons 
+                    SET {', '.join(update_fields)}
+                    WHERE id = ?
+                """
+                
+                self.execute(query, tuple(values))
+                return [lesson_id]
+                
         except Exception as e:
-            raise Exception(f"Fehler beim Aktualisieren der Stunde: {str(e)}")
+            raise Exception(f"Fehler beim Aktualisieren der Stunde(n): {str(e)}")
 
 
     def update_competency(self, comp_id: int, data: dict) -> None:
@@ -616,14 +628,37 @@ class DatabaseManager:
         except sqlite3.Error as e:
             raise Exception(f"Fehler beim Löschen des Schülers: {e}")
 
-    def delete_lesson(self, lesson_id: int) -> None:
-        """Löscht eine Unterrichtsstunde."""
+    def delete_lessons(self, lesson_id: int, delete_all_following: bool = False) -> None:
+        """Löscht eine oder mehrere Unterrichtsstunden.
+        
+        Args:
+            lesson_id: ID der zu löschenden Stunde
+            delete_all_following: Bool, ob alle folgenden Stunden auch gelöscht werden sollen
+        """
         try:
-            self.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
-            # Zugehörige Kompetenzzuordnungen löschen
-            self.execute("DELETE FROM lesson_competencies WHERE lesson_id = ?", (lesson_id,))
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Löschen der Unterrichtsstunde: {e}")
+            # Aktuelle Stunde und deren Hash holen
+            current_lesson = self.get_lesson(lesson_id)
+            if not current_lesson:
+                raise ValueError("Stunde nicht gefunden")
+                
+            if delete_all_following and current_lesson['recurring_hash']:
+                # Alle folgenden Stunden mit gleichem Hash löschen
+                self.execute(
+                    """DELETE FROM lessons 
+                    WHERE recurring_hash = ?
+                    AND date >= ?""",
+                    (current_lesson['recurring_hash'],
+                    current_lesson['date'])
+                )
+            else:
+                # Nur einzelne Stunde löschen
+                self.execute(
+                    "DELETE FROM lessons WHERE id = ?",
+                    (lesson_id,)
+                )
+                
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen der Stunde(n): {str(e)}")
 
     def delete_competency(self, comp_id: int) -> None:
         """Löscht eine Kompetenz."""
@@ -706,3 +741,48 @@ class DatabaseManager:
             return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             raise Exception(f"Fehler beim Abrufen der Kurse: {str(e)}")
+
+    def generate_recurring_hash(self, course_id: int, weekday: int, time: str) -> str:
+        """Generiert einen Hash für wiederkehrende Stunden.
+        
+        Args:
+            course_id: ID des Kurses
+            weekday: Wochentag als int (1=Montag, 7=Sonntag)
+            time: Uhrzeit im Format "HH:MM"
+            
+        Returns:
+            Hash-String für diese Kombination
+        """
+        return f"rec_{course_id}_{weekday}_{time.replace(':', '')}"
+
+    def delete_lessons(self, lesson_id: int, delete_all_following: bool = False) -> None:
+        """Löscht eine oder mehrere Unterrichtsstunden.
+        
+        Args:
+            lesson_id: ID der zu löschenden Stunde
+            delete_all_following: Bool, ob alle folgenden Stunden auch gelöscht werden sollen
+        """
+        try:
+            # Aktuelle Stunde und deren Hash holen
+            current_lesson = self.get_lesson(lesson_id)
+            if not current_lesson:
+                raise ValueError("Stunde nicht gefunden")
+                
+            if delete_all_following and current_lesson['recurring_hash']:
+                # Alle folgenden Stunden mit gleichem Hash löschen
+                self.execute(
+                    """DELETE FROM lessons 
+                    WHERE recurring_hash = ?
+                    AND date >= ?""",
+                    (current_lesson['recurring_hash'],
+                    current_lesson['date'])
+                )
+            else:
+                # Nur einzelne Stunde löschen
+                self.execute(
+                    "DELETE FROM lessons WHERE id = ?",
+                    (lesson_id,)
+                )
+                
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen der Stunde(n): {str(e)}")

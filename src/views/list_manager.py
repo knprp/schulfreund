@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QMessageBox, QMenu
 from PyQt6.QtCore import Qt, QTime, QDate
 from datetime import datetime, timedelta
 from src.views.dialogs.lesson_dialog import LessonDialog
+from src.views.dialogs.delete_lesson_dialog import DeleteLessonDialog
 
 class ListManager:
     def __init__(self, parent):
@@ -155,37 +156,58 @@ class ListManager:
         try:
             lesson = self.parent.db.get_lesson(lesson_id)
             if lesson:
-                dialog = LessonDialog(self.parent, QDate.fromString(lesson['date'], "yyyy-MM-dd"))
-                
-                # Setze den korrekten Kurs
-                for i in range(dialog.course.count()):
-                    course_data = dialog.course.itemData(i)
-                    if course_data and course_data.get('id') == lesson['course_id']:
-                        dialog.course.setCurrentIndex(i)
-                        break
-                
-                # Setze die Uhrzeit
-                dialog.time.setTime(QTime.fromString(lesson['time'], "HH:mm"))
-                
+                dialog = LessonDialog(
+                                    parent=self.parent,
+                                    selected_date=QDate.fromString(lesson['date'], "yyyy-MM-dd"),
+                                    lesson=lesson
+                                    ) # Übergebe die Stunde an den Dialog              
                 if dialog.exec():
                     updated_data = dialog.get_data()
-                    self.parent.db.update_lesson(lesson_id, updated_data)
-                    self.update_day_list(self.parent.calendarWidget.selectedDate())
-                    self.parent.statusBar().showMessage(f"Unterrichtsstunde wurde aktualisiert", 3000)
+                    # Extrahiere update_all_following aus den Daten
+                    update_all_following = updated_data.pop('update_all_following', False)
                     
+                    # Aktualisiere die Stunde(n)
+                    self.parent.db.update_lesson(lesson_id, 
+                                            updated_data, 
+                                            update_all_following)
+                    
+                    # Aktualisiere die Anzeige
+                    self.update_day_list(self.parent.calendarWidget.selectedDate())
+                    
+                    # Statusmeldung
+                    msg = "Stunde wurde aktualisiert"
+                    if update_all_following:
+                        msg = "Alle folgenden Stunden wurden aktualisiert"
+                    self.parent.statusBar().showMessage(msg, 3000)
+                        
         except Exception as e:
-            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Bearbeiten: {str(e)}")
+            QMessageBox.critical(self.parent, 
+                            "Fehler", 
+                            f"Fehler beim Bearbeiten: {str(e)}")
 
 
     def delete_lesson(self, lesson_id):
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Icon.Question)
-        msg.setText("Möchten Sie diese Unterrichtsstunde wirklich löschen?")
-        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        
-        if msg.exec() == QMessageBox.StandardButton.Yes:
-            try:
-                self.parent.db.delete_lesson(lesson_id)
+        """Löscht eine oder mehrere Unterrichtsstunden"""
+        try:
+            lesson = self.parent.db.get_lesson(lesson_id)
+            if not lesson:
+                return
+                
+            dialog = DeleteLessonDialog(self.parent, lesson)
+            
+            if dialog.exec():
+                delete_all = dialog.get_delete_all()
+                self.parent.db.delete_lessons(lesson_id, delete_all)
                 self.update_day_list(self.parent.calendarWidget.selectedDate())
-            except Exception as e:
-                QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Löschen: {str(e)}")
+                
+                msg = "Stunde wurde gelöscht"
+                if delete_all:
+                    msg = "Alle folgenden Stunden wurden gelöscht"
+                self.parent.statusBar().showMessage(msg, 3000)
+                
+        except Exception as e:
+            QMessageBox.critical(
+                self.parent, 
+                "Fehler", 
+                f"Fehler beim Löschen: {str(e)}"
+            )

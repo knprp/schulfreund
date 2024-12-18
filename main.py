@@ -618,32 +618,6 @@ class SchoolManagement(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Aktualisieren der Listen: {str(e)}")
 
-    def add_recurring_lesson(self):
-        dialog = RecurringLessonDialog(self)
-        if dialog.exec():
-            c = self.conn.cursor()
-
-            # Stunde speichern
-            c.execute("""INSERT INTO recurring_lessons
-                        (subject, course, weekday, time, duration)
-                        VALUES (?, ?, ?, ?, ?)""",
-                    (dialog.subject.currentText(),
-                    dialog.course.text(),
-                    dialog.weekday.currentIndex(),
-                    dialog.time.time().toString(),
-                    dialog.duration.value()))
-
-            lesson_id = c.lastrowid
-
-            # Kompetenzen zuordnen
-            for comp in dialog.selected_competencies:
-                c.execute("""INSERT INTO lesson_competencies
-                            (lesson_id, competency_id) VALUES (?, ?)""",
-                        (lesson_id, comp[0]))
-
-            self.conn.commit()
-            self.refresh_calendar()
-
     def refresh_calendar(self):
         c = self.conn.cursor()
 
