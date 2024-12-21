@@ -1,121 +1,76 @@
-# src/views/list_manager.py
-
 from PyQt6.QtGui import QStandardItemModel, QStandardItem
 from PyQt6.QtWidgets import QMessageBox, QMenu
-from PyQt6.QtCore import Qt, QTime, QDate
+from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, timedelta
-from src.views.dialogs.lesson_dialog import LessonDialog
-from src.views.dialogs.delete_lesson_dialog import DeleteLessonDialog
 
 class ListManager:
+    """Verwaltet die Logik und Inhalte der Listen in der Kalenderansicht."""
+    
     def __init__(self, parent):
         self.parent = parent
-        # Erstelle Datenmodelle für die drei Listen
+        self.calendar_container = parent.calendar_container
+        self.setup_models()
+        self.connect_models()
+        self.setup_connections()
+
+    def setup_models(self):
+        """Erstellt die Datenmodelle für die Listen"""
         self.day_model = QStandardItemModel()
         self.focus_model = QStandardItemModel()
         self.events_model = QStandardItemModel()
+
+    def connect_models(self):
+        """Verbindet die Modelle mit den ListView-Widgets"""
+        self.calendar_container.lessons_list.setModel(self.day_model)
+        self.calendar_container.focus_list.setModel(self.focus_model)
+        self.calendar_container.events_list.setModel(self.events_model)
+
+    def setup_connections(self):
+        """Richtet alle Signal-Verbindungen ein"""
+        # Kontext-Menü für Tagesliste
+        lessons_list = self.calendar_container.lessons_list
+        lessons_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        lessons_list.customContextMenuRequested.connect(self.show_lesson_context_menu)
         
-        # Weise die Modelle den ListView-Widgets zu
-        self.parent.listView_tag.setModel(self.day_model)
-        self.parent.listView_fokus.setModel(self.focus_model)
-        self.parent.listView_ereignisse.setModel(self.events_model)
-        
+        # Add-Button
+        self.calendar_container.add_lesson_btn.clicked.connect(self.add_day_lesson)
+
+    def update_all(self, date):
+        """Aktualisiert alle Listen für das ausgewählte Datum"""
+        self.update_day_list(date)
+        self.update_focus_list(date)
+        self.update_events_list(date)
+
     def update_day_list(self, date):
-        """Aktualisiert die Liste der Unterrichtsstunden für das ausgewählte Datum"""
+        """Aktualisiert die Tagesliste"""
         self.day_model.clear()
         try:
             lessons = self.parent.db.get_lessons_by_date(date.toString("yyyy-MM-dd"))
             if lessons:
                 for lesson in lessons:
-                    item = QStandardItem(f"{lesson['time']} - {lesson['subject']}: {lesson['topic']}")
-                    item.setData(lesson['id'], Qt.ItemDataRole.UserRole)  # Speichere lesson_id für spätere Verwendung
+                    item = QStandardItem(
+                        f"{lesson['time']} - {lesson['subject']}: {lesson.get('topic', '')}"
+                    )
+                    item.setData(lesson['id'], Qt.ItemDataRole.UserRole)
                     self.day_model.appendRow(item)
             else:
                 self.day_model.appendRow(QStandardItem("Keine Stunden für diesen Tag"))
         except Exception as e:
             QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Laden der Stunden: {str(e)}")
-            
-    def update_focus_list(self, date):
-        """Aktualisiert die 'Achte heute auf'-Liste basierend auf Schülern und ihren Leistungen"""
-        self.focus_model.clear()
-        try:
-            # Hole alle Schüler mit schlechten Noten in den letzten 30 Tagen
-            date_30_days_ago = (datetime.strptime(date.toString("yyyy-MM-dd"), "%Y-%m-%d") - 
-                               timedelta(days=30)).strftime("%Y-%m-%d")
-            
-            query = """
-                SELECT DISTINCT s.name, g.grade, c.subject
-                FROM students s
-                JOIN grades g ON s.id = g.student_id
-                JOIN lessons l ON g.lesson_id = l.id
-                JOIN competencies c ON g.competency_id = c.id
-                WHERE l.date >= ? AND l.date <= ?
-                AND g.grade >= 4
-                ORDER BY g.grade DESC, s.name
-            """
-            
-            students_to_watch = self.parent.db.execute(query, (date_30_days_ago, date.toString("yyyy-MM-dd")))
-            
-            if students_to_watch:
-                for student in students_to_watch:
-                    item = QStandardItem(
-                        f"{student['name']} - {student['subject']} (Note {student['grade']})"
-                    )
-                    self.focus_model.appendRow(item)
-            else:
-                self.focus_model.appendRow(QStandardItem("Keine besonderen Beobachtungen"))
-                
-        except Exception as e:
-            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Laden der Beobachtungsliste: {str(e)}")
-            
-    def update_events_list(self, date):
-        """Aktualisiert die Liste wichtiger Ereignisse"""
-        self.events_model.clear()
-        try:
-            # Hole alle wichtigen Ereignisse für die nächsten 14 Tage
-            end_date = (datetime.strptime(date.toString("yyyy-MM-dd"), "%Y-%m-%d") + 
-                       timedelta(days=14)).strftime("%Y-%m-%d")
-            
-            # Klausuren (als Beispiel - Sie müssten noch eine exams-Tabelle erstellen)
-            query = """
-                SELECT date, subject, topic, 'Klausur' as type
-                FROM lessons 
-                WHERE date >= ? AND date <= ?
-                AND topic LIKE '%Klausur%'
-                UNION
-                SELECT date, subject, topic, 'Test' as type
-                FROM lessons
-                WHERE date >= ? AND date <= ?
-                AND topic LIKE '%Test%'
-                ORDER BY date
-            """
-            
-            events = self.parent.db.execute(query, 
-                (date.toString("yyyy-MM-dd"), end_date, 
-                 date.toString("yyyy-MM-dd"), end_date))
-            
-            if events:
-                for event in events:
-                    event_date = datetime.strptime(event['date'], "%Y-%m-%d").strftime("%d.%m.")
-                    item = QStandardItem(
-                        f"{event_date} - {event['type']}: {event['subject']} ({event['topic']})"
-                    )
-                    self.events_model.appendRow(item)
-            else:
-                self.events_model.appendRow(QStandardItem("Keine anstehenden Ereignisse"))
-                
-        except Exception as e:
-            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Laden der Ereignisse: {str(e)}")
-    
-    def update_all(self, date):
-        """Aktualisiert alle Listen auf einmal"""
-        self.update_day_list(date)
-        self.update_focus_list(date)
-        self.update_events_list(date)
 
-    def add_day_lesson(self, selected_date):
+    def update_focus_list(self, date):
+        """Aktualisiert die 'Achte heute auf'-Liste"""
+        pass  # Implementierung folgt
+
+    def update_events_list(self, date):
+        """Aktualisiert die Liste der wichtigen Ereignisse"""
+        pass  # Implementierung folgt
+
+    def add_day_lesson(self):
         """Fügt eine neue Unterrichtsstunde für das ausgewählte Datum hinzu."""
         try:
+            from src.views.dialogs.lesson_dialog import LessonDialog
+            selected_date = self.calendar_container.get_selected_date()
             dialog = LessonDialog(self.parent, selected_date)
             if dialog.exec():
                 lesson_data = dialog.get_data()
@@ -132,7 +87,9 @@ class ListManager:
             )
 
     def show_lesson_context_menu(self, pos):
-        index = self.parent.listView_tag.indexAt(pos)
+        """Zeigt das Kontext-Menü für eine Unterrichtsstunde"""
+        list_view = self.calendar_container.lessons_list
+        index = list_view.indexAt(pos)
         if not index.isValid():
             return
             
@@ -140,51 +97,46 @@ class ListManager:
         edit_action = menu.addAction("Bearbeiten")
         delete_action = menu.addAction("Löschen")
         
-        action = menu.exec(self.parent.listView_tag.viewport().mapToGlobal(pos))
-        
-        if action:
-            item = self.day_model.itemFromIndex(index)
-            lesson_id = item.data(Qt.ItemDataRole.UserRole)
+        action = menu.exec(list_view.viewport().mapToGlobal(pos))
+        if not action:
+            return
             
-            if action == edit_action:
-                self.edit_lesson(lesson_id)
-            elif action == delete_action:
-                self.delete_lesson(lesson_id)
+        item = self.day_model.itemFromIndex(index)
+        lesson_id = item.data(Qt.ItemDataRole.UserRole)
+        
+        if action == edit_action:
+            self.edit_lesson(lesson_id)
+        elif action == delete_action:
+            self.delete_lesson(lesson_id)
 
     def edit_lesson(self, lesson_id):
         """Bearbeitet eine existierende Unterrichtsstunde"""
         try:
             lesson = self.parent.db.get_lesson(lesson_id)
             if lesson:
+                from src.views.dialogs.lesson_dialog import LessonDialog
                 dialog = LessonDialog(
-                                    parent=self.parent,
-                                    selected_date=QDate.fromString(lesson['date'], "yyyy-MM-dd"),
-                                    lesson=lesson
-                                    ) # Übergebe die Stunde an den Dialog              
+                    parent=self.parent,
+                    selected_date=QDate.fromString(lesson['date'], "yyyy-MM-dd"),
+                    lesson=lesson
+                )
                 if dialog.exec():
                     updated_data = dialog.get_data()
-                    # Extrahiere update_all_following aus den Daten
                     update_all_following = updated_data.pop('update_all_following', False)
                     
-                    # Aktualisiere die Stunde(n)
-                    self.parent.db.update_lesson(lesson_id, 
-                                            updated_data, 
-                                            update_all_following)
+                    self.parent.db.update_lesson(
+                        lesson_id, 
+                        updated_data, 
+                        update_all_following
+                    )
                     
-                    # Aktualisiere die Anzeige
-                    self.update_day_list(self.parent.calendarWidget.selectedDate())
+                    self.update_day_list(self.calendar_container.get_selected_date())
                     
-                    # Statusmeldung
-                    msg = "Stunde wurde aktualisiert"
-                    if update_all_following:
-                        msg = "Alle folgenden Stunden wurden aktualisiert"
+                    msg = "Alle folgenden Stunden wurden aktualisiert" if update_all_following else "Stunde wurde aktualisiert"
                     self.parent.statusBar().showMessage(msg, 3000)
-                        
+                    
         except Exception as e:
-            QMessageBox.critical(self.parent, 
-                            "Fehler", 
-                            f"Fehler beim Bearbeiten: {str(e)}")
-
+            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Bearbeiten: {str(e)}")
 
     def delete_lesson(self, lesson_id):
         """Löscht eine oder mehrere Unterrichtsstunden"""
@@ -193,21 +145,16 @@ class ListManager:
             if not lesson:
                 return
                 
+            from src.views.dialogs.delete_lesson_dialog import DeleteLessonDialog    
             dialog = DeleteLessonDialog(self.parent, lesson)
             
             if dialog.exec():
                 delete_all = dialog.get_delete_all()
                 self.parent.db.delete_lessons(lesson_id, delete_all)
-                self.update_day_list(self.parent.calendarWidget.selectedDate())
+                self.update_day_list(self.calendar_container.get_selected_date())
                 
-                msg = "Stunde wurde gelöscht"
-                if delete_all:
-                    msg = "Alle folgenden Stunden wurden gelöscht"
+                msg = "Alle folgenden Stunden wurden gelöscht" if delete_all else "Stunde wurde gelöscht"
                 self.parent.statusBar().showMessage(msg, 3000)
                 
         except Exception as e:
-            QMessageBox.critical(
-                self.parent, 
-                "Fehler", 
-                f"Fehler beim Löschen: {str(e)}"
-            )
+            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Löschen: {str(e)}")

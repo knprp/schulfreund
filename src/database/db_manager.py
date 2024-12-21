@@ -152,10 +152,32 @@ class DatabaseManager:
                     subject TEXT NOT NULL,
                     topic TEXT NOT NULL,
                     recurring_hash TEXT,
+                    lesson_number INTEGER,
+                    duration INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
                 )
             ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS timetable_settings (
+                    id INTEGER PRIMARY KEY,
+                    first_lesson_start TEXT NOT NULL,  -- z.B. "08:00"
+                    lesson_duration INTEGER NOT NULL,   -- in Minuten
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS breaks (
+                    id INTEGER PRIMARY KEY,
+                    after_lesson INTEGER NOT NULL,      -- nach welcher Stunde
+                    duration INTEGER NOT NULL,          -- in Minuten
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             self.conn.commit()               
         except sqlite3.Error as e:
             raise Exception(f"Fehler beim Erstellen der Tabellen: {e}")
