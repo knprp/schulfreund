@@ -12,6 +12,7 @@ class CalendarContainer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
+        self.current_date = QDate.currentDate()  # Aktuelles Datum speichern
         self.setup_ui()
 
     def setup_ui(self):
@@ -20,7 +21,7 @@ class CalendarContainer(QWidget):
         grid_layout.setSpacing(10)
 
         # Umschalt-Button für die Ansichten
-        self.view_toggle = QPushButton("Zur Wochenansicht")
+        self.view_toggle = QPushButton("Zur Kalenderansicht")  # Geänderter Standardtext
         self.view_toggle.clicked.connect(self.toggle_view)
         grid_layout.addWidget(self.view_toggle, 0, 0, 1, 1)
 
@@ -29,6 +30,7 @@ class CalendarContainer(QWidget):
         
         # Kalenderansicht
         self.calendar_widget = QCalendarWidget()
+        self.calendar_widget.setSelectedDate(self.current_date)  # Aktuelles Datum setzen
         self.calendar_widget.clicked.connect(self.on_date_selected)
         
         # Wochenansicht
@@ -36,6 +38,9 @@ class CalendarContainer(QWidget):
         
         self.stack.addWidget(self.calendar_widget)
         self.stack.addWidget(self.week_view)
+        
+        # Initial die Wochenansicht anzeigen
+        self.stack.setCurrentIndex(1)
         
         grid_layout.addWidget(self.stack, 1, 0, 1, 2)
 
@@ -45,6 +50,9 @@ class CalendarContainer(QWidget):
 
         # Listen (werden vom ListManager verwaltet)
         self.setup_lists(grid_layout)
+        
+        # Initial die Wochenansicht aktualisieren
+        self.update_week_view()
 
     def setup_lists(self, grid_layout):
         """Richtet die Listen ein, die vom ListManager verwaltet werden"""

@@ -27,6 +27,9 @@ class SchoolManagement(QMainWindow):
         # UI aus .ui Datei laden
         uic.loadUi("school.ui", self)
         self.setWindowIcon(QIcon('favicon.ico'))
+
+        # Setze den Kalender-Tab als Startansicht
+        self.tabWidget.setCurrentIndex(0)
         
         # Den alten Kalender mit dem CalendarContainer ersetzen
         self.setup_calendar_container()

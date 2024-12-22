@@ -12,6 +12,8 @@ class ListManager:
         self.setup_models()
         self.connect_models()
         self.setup_connections()
+        # Initiale Aktualisierung mit aktuellem Datum
+        self.update_all(QDate.currentDate())
 
     def setup_models(self):
         """Erstellt die Datenmodelle für die Listen"""
@@ -67,24 +69,69 @@ class ListManager:
         pass  # Implementierung folgt
 
     def add_day_lesson(self):
-        """Fügt eine neue Unterrichtsstunde für das ausgewählte Datum hinzu."""
+        """Fügt neue Unterrichtsstunde(n) für das ausgewählte Datum hinzu."""
         try:
             from src.views.dialogs.lesson_dialog import LessonDialog
             selected_date = self.calendar_container.get_selected_date()
             dialog = LessonDialog(self.parent, selected_date)
             if dialog.exec():
-                lesson_data = dialog.get_data()
-                self.parent.db.add_lesson(lesson_data)
+                lessons_data = dialog.get_data()  # Jetzt eine Liste von Stunden
+                
+                # Erstelle jede ausgewählte Stunde
+                for lesson_data in lessons_data:
+                    self.parent.db.add_lesson(lesson_data)
+                
                 self.update_day_list(selected_date)
-                self.parent.statusBar().showMessage(
-                    f"Unterrichtsstunde wurde hinzugefügt", 3000
-                )
+                
+                # Statusmeldung anpassen
+                if len(lessons_data) == 1:
+                    msg = "Unterrichtsstunde wurde hinzugefügt"
+                else:
+                    msg = f"{len(lessons_data)} Unterrichtsstunden wurden hinzugefügt"
+                self.parent.statusBar().showMessage(msg, 3000)
+                
         except Exception as e:
             QMessageBox.critical(
                 self.parent, 
                 "Fehler", 
-                f"Fehler beim Hinzufügen der Stunde: {str(e)}"
+                f"Fehler beim Hinzufügen der Stunde(n): {str(e)}"
             )
+
+    def edit_lesson(self, lesson_id):
+        """Bearbeitet existierende Unterrichtsstunde(n)"""
+        try:
+            lesson = self.parent.db.get_lesson(lesson_id)
+            if lesson:
+                from src.views.dialogs.lesson_dialog import LessonDialog
+                dialog = LessonDialog(
+                    parent=self.parent,
+                    selected_date=QDate.fromString(lesson['date'], "yyyy-MM-dd"),
+                    lesson=lesson
+                )
+                if dialog.exec():
+                    lessons_data = dialog.get_data()
+                    
+                    # Bei Bearbeitung erwarten wir normalerweise nur eine Stunde
+                    update_data = lessons_data[0]
+                    update_all_following = update_data.pop('update_all_following', False)
+                    
+                    # Aktualisiere die Stunde(n)
+                    self.parent.db.update_lesson(
+                        lesson_id, 
+                        update_data, 
+                        update_all_following
+                    )
+                    
+                    self.update_day_list(self.calendar_container.get_selected_date())
+                    
+                    msg = "Alle folgenden Stunden wurden aktualisiert" if update_all_following \
+                          else "Stunde wurde aktualisiert"
+                    self.parent.statusBar().showMessage(msg, 3000)
+                    
+        except Exception as e:
+            QMessageBox.critical(self.parent, 
+                               "Fehler", 
+                               f"Fehler beim Bearbeiten: {str(e)}")
 
     def show_lesson_context_menu(self, pos):
         """Zeigt das Kontext-Menü für eine Unterrichtsstunde"""
@@ -108,35 +155,6 @@ class ListManager:
             self.edit_lesson(lesson_id)
         elif action == delete_action:
             self.delete_lesson(lesson_id)
-
-    def edit_lesson(self, lesson_id):
-        """Bearbeitet eine existierende Unterrichtsstunde"""
-        try:
-            lesson = self.parent.db.get_lesson(lesson_id)
-            if lesson:
-                from src.views.dialogs.lesson_dialog import LessonDialog
-                dialog = LessonDialog(
-                    parent=self.parent,
-                    selected_date=QDate.fromString(lesson['date'], "yyyy-MM-dd"),
-                    lesson=lesson
-                )
-                if dialog.exec():
-                    updated_data = dialog.get_data()
-                    update_all_following = updated_data.pop('update_all_following', False)
-                    
-                    self.parent.db.update_lesson(
-                        lesson_id, 
-                        updated_data, 
-                        update_all_following
-                    )
-                    
-                    self.update_day_list(self.calendar_container.get_selected_date())
-                    
-                    msg = "Alle folgenden Stunden wurden aktualisiert" if update_all_following else "Stunde wurde aktualisiert"
-                    self.parent.statusBar().showMessage(msg, 3000)
-                    
-        except Exception as e:
-            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Bearbeiten: {str(e)}")
 
     def delete_lesson(self, lesson_id):
         """Löscht eine oder mehrere Unterrichtsstunden"""
