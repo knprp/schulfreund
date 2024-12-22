@@ -1,5 +1,3 @@
-# src/views/week_view.py
-
 from PyQt6.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem, QHeaderView,
                            QVBoxLayout, QMenu)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
@@ -25,37 +23,20 @@ class WeekView(QWidget):
         
         # Tabelle erstellen
         self.table = QTableWidget()
-        
-        # Verhindern von Bearbeitung durch Klicks
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         
-        self.table.setColumnCount(5)  # Mo-Fr
-        self.table.setRowCount(10)    # Stunden 1-10
-        
-        # Spaltenüberschriften (Wochentage)
+        # Spalten für Mo-Fr
+        self.table.setColumnCount(5)
         weekdays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag']
         self.table.setHorizontalHeaderLabels(weekdays)
         
-        # Zeilenüberschriften (Stunden)
-        time_slots = [
-            '08:00 - 08:45', '08:45 - 09:30', 
-            '09:45 - 10:30', '10:30 - 11:15',
-            '11:30 - 12:15', '12:15 - 13:00',
-            '13:30 - 14:15', '14:15 - 15:00',
-            '15:00 - 15:45', '15:45 - 16:30'
-        ]
-        self.table.setVerticalHeaderLabels(time_slots)
+        # Zeilen und Zeitslots werden dynamisch gesetzt
+        self.update_time_slots()
         
         # Spaltenbreite anpassen
         header = self.table.horizontalHeader()
         for i in range(5):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
-        
-        # Zeilenhöhe anpassen
-        for i in range(10):
-            self.table.setRowHeight(i, 60)
-        
-        layout.addWidget(self.table)
         
         # Styling
         self.table.setShowGrid(True)
@@ -70,6 +51,52 @@ class WeekView(QWidget):
                 border: 1px solid #d0d0d0;
             }
         """)
+        
+        layout.addWidget(self.table)
+
+    def update_time_slots(self):
+        """Aktualisiert die Zeilen und Zeitslots basierend auf den Einstellungen"""
+        try:
+            print("Checking for settings...")
+            print(f"Has settings_tab: {hasattr(self.parent, 'settings_tab')}")
+            print(f"Parent type: {type(self.parent)}")
+            if hasattr(self.parent, "settings_tab"):
+                print(f"Has settings_tabs: {hasattr(self.parent.settings_tab, 'settings_tabs')}")
+                print(f"Has timetable_settings: {hasattr(self.parent.settings_tab, 'timetable_settings')}")
+            
+            if hasattr(self.parent, "settings_tab") and \
+               hasattr(self.parent.settings_tab, "timetable_settings") and \
+               self.parent.settings_tab.timetable_settings is not None:
+                
+                time_slots = self.parent.settings_tab.timetable_settings.get_time_slots()
+                self.table.setRowCount(len(time_slots))
+                
+                # Zeitslots als Zeilenüberschriften setzen
+                time_labels = []
+                for start_time, end_time, lesson_num in time_slots:
+                    time_label = f"{start_time.toString('HH:mm')} - {end_time.toString('HH:mm')}"
+                    time_labels.append(time_label)
+                    # Zeilenhöhe anpassen (60 Pixel pro Stunde)
+                    self.table.setRowHeight(lesson_num - 1, 60)
+                
+                self.table.setVerticalHeaderLabels(time_labels)
+                
+            else:
+                # Fallback auf Standardzeiten
+                standard_times = [
+                    "08:00 - 08:45", "08:45 - 09:30", 
+                    "09:45 - 10:30", "10:30 - 11:15",
+                    "11:30 - 12:15", "12:15 - 13:00",
+                    "13:30 - 14:15", "14:15 - 15:00",
+                    "15:00 - 15:45", "15:45 - 16:30"
+                ]
+                self.table.setRowCount(len(standard_times))
+                self.table.setVerticalHeaderLabels(standard_times)
+                for i in range(len(standard_times)):
+                    self.table.setRowHeight(i, 60)
+                
+        except Exception as e:
+            print(f"Fehler beim Aktualisieren der Zeitslots: {str(e)}")
 
     def setup_context_menu(self):
         """Richtet das Kontextmenü ein"""
@@ -127,6 +154,15 @@ class WeekView(QWidget):
                     
             current_date = current_date.addDays(1)
 
+    def get_row_for_time(self, time: str) -> int:
+        """Ermittelt die Tabellenzeile für eine bestimmte Uhrzeit"""
+        for row in range(self.table.rowCount()):
+            header_text = self.table.verticalHeaderItem(row).text()
+            start_time = header_text.split(" - ")[0]
+            if start_time == time:
+                return row
+        return -1
+
     def create_lesson_item(self, lesson):
         """Erstellt ein TableWidgetItem für eine Unterrichtsstunde"""
         item = QTableWidgetItem()
@@ -163,70 +199,3 @@ class WeekView(QWidget):
             'Musik': QColor('#E5FFE5'),       # Hellgrün
         }
         return colors.get(subject, QColor('#FFFFFF'))  # Weiß als Standard
-
-    def get_row_for_time(self, time: str) -> int:
-        """Ermittelt die Tabellenzeile für eine bestimmte Uhrzeit"""
-        time_map = {
-            "08:00": 0, "08:45": 1,
-            "09:45": 2, "10:30": 3,
-            "11:30": 4, "12:15": 5,
-            "13:30": 6, "14:15": 7,
-            "15:00": 8, "15:45": 9
-        }
-        return time_map.get(time, -1)
-
-    def on_cell_clicked(self, row, col):
-        """Handler für Klicks auf Tabellenzellen"""
-        item = self.table.item(row, col)
-        if item and item.data(Qt.ItemDataRole.UserRole):
-            self.lesson_clicked.emit(item.data(Qt.ItemDataRole.UserRole))
-
-    def on_cell_double_clicked(self, row, col):
-        """Handler für Doppelklicks auf Tabellenzellen"""
-        item = self.table.item(row, col)
-        if item and item.data(Qt.ItemDataRole.UserRole):
-            self.lesson_double_clicked.emit(item.data(Qt.ItemDataRole.UserRole))
-
-    def add_lesson(self, row, col):
-        """Fügt eine neue Stunde hinzu"""
-        # Berechne Datum und Zeit aus Zeile/Spalte
-        date = self.current_week.addDays(col)
-        time = self.get_time_for_row(row)
-        
-        if time:
-            from src.views.dialogs.lesson_dialog import LessonDialog
-            dialog = LessonDialog(self.parent, date)
-            if dialog.exec():
-                lesson_data = dialog.get_data()
-                self.parent.db.add_lesson(lesson_data)
-                self.update_view(self.current_week)
-
-    def get_time_for_row(self, row: int) -> str:
-        """Ermittelt die Uhrzeit für eine bestimmte Zeile"""
-        times = [
-            "08:00", "08:45",
-            "09:45", "10:30",
-            "11:30", "12:15",
-            "13:30", "14:15",
-            "15:00", "15:45"
-        ]
-        return times[row] if 0 <= row < len(times) else None
-
-    def delete_lesson(self, lesson_id: int):
-        """Löscht eine Unterrichtsstunde"""
-        from PyQt6.QtWidgets import QMessageBox
-        reply = QMessageBox.question(
-            self,
-            'Stunde löschen',
-            'Möchten Sie diese Stunde wirklich löschen?',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                self.parent.db.delete_lessons(lesson_id)
-                self.update_view(self.current_week)
-                self.parent.statusBar().showMessage("Stunde wurde gelöscht", 3000)
-            except Exception as e:
-                QMessageBox.critical(self, "Fehler", str(e))

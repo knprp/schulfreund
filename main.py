@@ -31,14 +31,14 @@ class SchoolManagement(QMainWindow):
         # Setze den Kalender-Tab als Startansicht
         self.tabWidget.setCurrentIndex(0)
         
-        # Den alten Kalender mit dem CalendarContainer ersetzen
+        # UI-Komponenten initialisieren (inkl. settings_tab)
+        self.setup_ui()
+        
+        # Den CalendarContainer erstellen (der die WeekView enthält)
         self.setup_calendar_container()
         
         # ListManager für Kalenderansichten initialisieren
         self.list_manager = ListManager(self)
-        
-        # UI-Komponenten initialisieren
-        self.setup_ui()
     
     def setup_calendar_container(self):
         """Ersetzt den alten Kalender mit dem neuen CalendarContainer"""
