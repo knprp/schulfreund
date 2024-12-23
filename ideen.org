@@ -87,12 +87,16 @@
        - ID
        - Name
        - Klasse
-       - Standardsatz an Kompetenzen
+       - Selbst und Team-Kompetenz
+       - Latein-Kompetenzen
+       - Geschichts-Kompetenzen
+       - Informatik-Kompetenzen
     2. Klassen-Klasse ODER Fach/Kursklasse
        - ID
        - Name
        - wenn Kurs: welches Fach    ||| wenn Klasse: dann muss ich Unterricht in nem bestimmten Fach eintragen
 	                                PROBLEM: Gemischte Kurse: die  wären dann drei Klassen zugeordnet
+       - Schuljahr
 
 *** Import/Export-Funktion
     - CVS-Import für Schülerdaten

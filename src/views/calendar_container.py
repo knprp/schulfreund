@@ -87,7 +87,10 @@ class CalendarContainer(QWidget):
         self.view_toggle.setText(text)
         
         if new_index == 1:  # Wochenansicht
-            self.update_week_view()
+            # Hole das aktuelle Datum aus dem Kalender
+            selected_date = self.calendar_widget.selectedDate()
+            # Setze die Woche in der WeekView
+            self.week_view.week_navigator.set_week(selected_date)
 
     def update_week_view(self):
         """Aktualisiert die Wochenansicht"""

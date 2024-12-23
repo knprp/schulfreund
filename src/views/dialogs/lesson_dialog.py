@@ -272,40 +272,39 @@ class LessonDialog(QDialog):
 
         self.accept()
 
-    def get_data(self):
-        """Gibt die eingegebenen Daten zurück"""
-        course_data = self.course.currentData()
-        selected_slots = self.get_selected_slots()  # Gibt jetzt (time, duration) Tuples zurück
+def get_data(self):
+    """Gibt die eingegebenen Daten zurück"""
+    course_data = self.course.currentData()
+    selected_slots = self.get_selected_slots()  # Gibt (time, duration) Tuples zurück
+    
+    # Basisdaten, die für alle Stunden gleich sind
+    base_data = {
+        'course_id': course_data['id'],
+        'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
+        'subject': course_data['subject'],
+        'topic': self.topic.text().strip(),
+    }
+    
+    # Liste für alle Stunden
+    lessons_data = []
+    
+    # Erstelle für jede ausgewählte Stunde einen Eintrag
+    for time_slot, duration in selected_slots:  # Tuple auspacken
+        lesson_data = base_data.copy()
+        lesson_data['time'] = time_slot
+        lesson_data['duration'] = duration
         
-        # Basisdaten, die für alle Stunden gleich sind
-        base_data = {
-            'course_id': course_data['id'],
-            'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
-            'subject': course_data['subject'],
-            'topic': self.topic.text().strip(),
-        }
-        
-        # Liste für alle Stunden
-        lessons_data = []
-        
-        # Erstelle für jede ausgewählte Stunde einen Eintrag
-        for time_slot, duration in selected_slots:  # Tuple auspacken
-            lesson_data = base_data.copy()
-            lesson_data['time'] = time_slot
-            lesson_data['duration'] = duration  # duration hinzufügen
-            lessons_data.append(lesson_data)
-        
-        # Füge Flags für wiederkehrende Stunden oder Aktualisierung hinzu
+        # Flags direkt hier pro Stunde setzen
         if not self.lesson:
-            for data in lessons_data:
-                data['is_recurring'] = getattr(self, 'recurring_checkbox', False) and \
-                                    self.recurring_checkbox.isChecked()
+            lesson_data['is_recurring'] = (hasattr(self, 'recurring_checkbox') and 
+                                         self.recurring_checkbox.isChecked())
         else:
-            for data in lessons_data:
-                data['update_all_following'] = getattr(self, 'update_following_checkbox', False) and \
-                                            self.update_following_checkbox.isChecked()
+            lesson_data['update_all_following'] = (hasattr(self, 'update_following_checkbox') and 
+                                                 self.update_following_checkbox.isChecked())
         
-        return lessons_data
+        lessons_data.append(lesson_data)
+    
+    return lessons_data
 
     def mark_occupied_slots(self):
         """Markiert bereits belegte Zeitslots"""

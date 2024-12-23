@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem, QHeaderVie
                            QVBoxLayout, QMenu)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
+from .week_navigator import WeekNavigator  # Am Anfang der Datei hinzufügen
 
 class WeekView(QWidget):
     """Widget zur Anzeige des Wochenstundenplans"""
@@ -21,24 +22,26 @@ class WeekView(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        # Tabelle erstellen
+        # Navigator hinzufügen
+        self.week_navigator = WeekNavigator(self)
+        self.week_navigator.week_changed.connect(self.update_view)
+        layout.addWidget(self.week_navigator)
+        
+        # Tabelle erstellen (bisheriger Code)
         self.table = QTableWidget()
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         
-        # Spalten für Mo-Fr
+        # Rest des bisherigen setup_ui Codes...
         self.table.setColumnCount(5)
         weekdays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag']
         self.table.setHorizontalHeaderLabels(weekdays)
         
-        # Zeilen und Zeitslots werden dynamisch gesetzt
         self.update_time_slots()
         
-        # Spaltenbreite anpassen
         header = self.table.horizontalHeader()
         for i in range(5):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
         
-        # Styling
         self.table.setShowGrid(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -135,22 +138,27 @@ class WeekView(QWidget):
 
     def update_view(self, week_start: QDate):
         """Aktualisiert die Ansicht für die gewählte Woche"""
+        # Existierende Methode anpassen, um week_start zu verwenden
         self.table.clearContents()
-        self.current_week = week_start
         
         # Hole die Daten für jeden Tag der Woche
-        current_date = week_start
+        current_date = week_start  # Statt direkt week_start zu setzen
         for day in range(5):  # Mo-Fr
             date_str = current_date.toString("yyyy-MM-dd")
             lessons = self.parent.db.get_lessons_by_date(date_str)
             
-            # Füge Stunden in die entsprechenden Zellen ein
+            # Rest des bisherigen update_view Codes...
             for lesson in lessons:
                 time = lesson['time']
                 row = self.get_row_for_time(time)
                 if row >= 0:
                     item = self.create_lesson_item(lesson)
                     self.table.setItem(row, day, item)
+                    
+                    if lesson.get('duration', 1) == 2 and row < self.table.rowCount() - 1:
+                        self.table.setSpan(row, day, 2, 1)
+                        if self.table.item(row + 1, day):
+                            self.table.takeItem(row + 1, day)
                     
             current_date = current_date.addDays(1)
 
