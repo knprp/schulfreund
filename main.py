@@ -42,19 +42,23 @@ class SchoolManagement(QMainWindow):
     
     def setup_calendar_container(self):
         """Ersetzt den alten Kalender mit dem neuen CalendarContainer"""
-        # Alten Kalender und zugehörige Widgets aus dem Layout entfernen
-        for widget in [self.calendarWidget, self.listView_tag, self.listView_fokus,
-                      self.listView_ereignisse, self.label, self.label_2, 
-                      self.label_3, self.label_4, self.label_5, self.label_6,
-                      self.addLessonButton]:
-            widget.setParent(None)
-            widget.deleteLater()
+        # Alten Kalender und zugehörige Widgets entfernen
+        old_widgets = ['calendarWidget', 'listView_tag', 'listView_fokus',
+                    'listView_ereignisse', 'label', 'label_2', 
+                    'label_3', 'label_4', 'label_5', 'label_6',
+                    'addLessonButton']
+        
+        for widget_name in old_widgets:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                widget.setParent(None)
+                widget.deleteLater()
         
         # Neuen CalendarContainer erstellen und einsetzen
         self.calendar_container = CalendarContainer(self)
-        self.tab_kal.layout = QVBoxLayout(self.tab_kal)
-        self.tab_kal.layout.setContentsMargins(0, 0, 0, 0)
-        self.tab_kal.layout.addWidget(self.calendar_container)
+        if not hasattr(self.tab_kal, 'layout') or self.tab_kal.layout() is None:
+            self.tab_kal.setLayout(QVBoxLayout())
+        self.tab_kal.layout().addWidget(self.calendar_container)
         
     def setup_ui(self):
         """Initialisiert die Benutzeroberfläche"""
