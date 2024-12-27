@@ -1,8 +1,8 @@
 from PyQt6.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-                           QVBoxLayout, QMenu)
+                           QVBoxLayout, QMenu, QMessageBox)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
-from .week_navigator import WeekNavigator  # Am Anfang der Datei hinzufügen
+from .week_navigator import WeekNavigator
 
 class WeekView(QWidget):
     """Widget zur Anzeige des Wochenstundenplans"""
@@ -124,17 +124,39 @@ class WeekView(QWidget):
                 return
                 
             if action == edit_action:
-                self.lesson_clicked.emit(lesson_id)
+                if hasattr(self.parent, 'list_manager'):
+                    self.parent.list_manager.edit_lesson(lesson_id)
+                    self.update_view(self.week_navigator.current_week_start)
             elif action == delete_action:
-                self.delete_lesson(lesson_id)
-                
+                if hasattr(self.parent, 'list_manager'):
+                    self.parent.list_manager.delete_lesson(lesson_id)
+                    self.update_view(self.week_navigator.current_week_start)
+                    
         else:  # Leere Zelle
             if row >= 0 and col >= 0:  # Gültige Zelle
                 add_action = menu.addAction("Stunde hinzufügen")
                 
                 action = menu.exec(self.table.viewport().mapToGlobal(pos))
                 if action == add_action:
-                    self.add_lesson(row, col)
+                    self.add_lesson_at_position(row, col)
+
+    def add_lesson_at_position(self, row, col):
+        """Fügt eine neue Stunde an der gewählten Position hinzu"""
+        try:
+            # Datum bestimmen: Montag + Anzahl Tage der Spalte
+            date = self.week_navigator.current_week_start.addDays(col)
+            
+            # Zeit aus der Zeilenbeschriftung extrahieren
+            time_label = self.table.verticalHeaderItem(row).text()
+            time = time_label.split(" - ")[0]  # Nehme nur die Startzeit
+            
+            # Delegation an ListManager
+            if hasattr(self.parent, 'list_manager'):
+                self.parent.list_manager.add_lesson_at_position(date, time)
+                # Die View wird vom ListManager aktualisiert, wir müssen hier nichts tun
+                    
+        except Exception as e:
+            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Hinzufügen der Stunde: {str(e)}")
 
     def update_view(self, week_start: QDate):
         """Aktualisiert die Ansicht für die gewählte Woche"""

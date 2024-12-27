@@ -143,7 +143,6 @@ class LessonDialog(QDialog):
                     self.lessons_table.setCellWidget(row, 1, checkbox)
                 
         except Exception as e:
-            print(f"Fehler beim Laden der Stundenzeiten: {str(e)}")  # Debug-Ausgabe
             QMessageBox.warning(self, "Warnung", 
                             "Fehler beim Laden der Stundenzeiten. "
                             "Standardzeiten werden verwendet.")
@@ -209,18 +208,14 @@ class LessonDialog(QDialog):
     def load_courses(self):
         """Lädt alle verfügbaren Kurse/Klassen"""
         try:
-            print("Loading courses...") # Debug
             courses = self.parent.db.get_all_courses()
-            print(f"Found courses: {courses}")  # Debug
             self.course.clear()
             self.course.addItem("Bitte wählen...", None)  # Standardauswahl
             for course in courses:
                 display_text = f"{course['name']} ({course['type']})"
-                print(f"Adding course: {display_text}")  # Debug
                 self.course.addItem(display_text, course)
             self.update_subject_display()
         except Exception as e:
-            print(f"Error: {e}")  # Debug
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Kurse: {str(e)}")
 
     def update_subject_display(self):
@@ -272,39 +267,39 @@ class LessonDialog(QDialog):
 
         self.accept()
 
-def get_data(self):
-    """Gibt die eingegebenen Daten zurück"""
-    course_data = self.course.currentData()
-    selected_slots = self.get_selected_slots()  # Gibt (time, duration) Tuples zurück
-    
-    # Basisdaten, die für alle Stunden gleich sind
-    base_data = {
-        'course_id': course_data['id'],
-        'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
-        'subject': course_data['subject'],
-        'topic': self.topic.text().strip(),
-    }
-    
-    # Liste für alle Stunden
-    lessons_data = []
-    
-    # Erstelle für jede ausgewählte Stunde einen Eintrag
-    for time_slot, duration in selected_slots:  # Tuple auspacken
-        lesson_data = base_data.copy()
-        lesson_data['time'] = time_slot
-        lesson_data['duration'] = duration
+    def get_data(self):
+        """Gibt die eingegebenen Daten zurück"""
+        course_data = self.course.currentData()
+        selected_slots = self.get_selected_slots()  # Gibt (time, duration) Tuples zurück
         
-        # Flags direkt hier pro Stunde setzen
-        if not self.lesson:
-            lesson_data['is_recurring'] = (hasattr(self, 'recurring_checkbox') and 
-                                         self.recurring_checkbox.isChecked())
-        else:
-            lesson_data['update_all_following'] = (hasattr(self, 'update_following_checkbox') and 
-                                                 self.update_following_checkbox.isChecked())
+        # Basisdaten, die für alle Stunden gleich sind
+        base_data = {
+            'course_id': course_data['id'],
+            'date': self.calendar.selectedDate().toString("yyyy-MM-dd"),
+            'subject': course_data['subject'],
+            'topic': self.topic.text().strip(),
+        }
         
-        lessons_data.append(lesson_data)
-    
-    return lessons_data
+        # Liste für alle Stunden
+        lessons_data = []
+        
+        # Erstelle für jede ausgewählte Stunde einen Eintrag
+        for time_slot, duration in selected_slots:  # Tuple auspacken
+            lesson_data = base_data.copy()
+            lesson_data['time'] = time_slot
+            lesson_data['duration'] = duration
+            
+            # Flags direkt hier pro Stunde setzen
+            if not self.lesson:
+                lesson_data['is_recurring'] = (hasattr(self, 'recurring_checkbox') and 
+                                            self.recurring_checkbox.isChecked())
+            else:
+                lesson_data['update_all_following'] = (hasattr(self, 'update_following_checkbox') and 
+                                                    self.update_following_checkbox.isChecked())
+            
+            lessons_data.append(lesson_data)
+        
+        return lessons_data
 
     def mark_occupied_slots(self):
         """Markiert bereits belegte Zeitslots"""
@@ -412,7 +407,6 @@ def get_data(self):
         # Setze die entsprechende Stunde
         lesson_time = self.lesson['time']
         """Lädt die Daten einer existierenden Stunde in den Dialog"""
-        print("Loading lesson data:", self.lesson)  # Debug print
         for row in range(self.lessons_table.rowCount()):
             time_text = self.lessons_table.item(row, 0).text()
             start_time = time_text.split(" - ")[0]

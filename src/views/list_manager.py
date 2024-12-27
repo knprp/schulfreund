@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QMessageBox, QMenu
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, timedelta
 
+
 class ListManager:
     """Verwaltet die Logik und Inhalte der Listen in der Kalenderansicht."""
     
@@ -97,6 +98,42 @@ class ListManager:
                 f"Fehler beim Hinzufügen der Stunde(n): {str(e)}"
             )
 
+    def add_lesson_at_position(self, date: QDate, time: str):
+        """Fügt eine neue Stunde zu einer bestimmten Zeit an einem bestimmten Datum hinzu"""
+        try:
+            from src.views.dialogs.lesson_dialog import LessonDialog
+            dialog = LessonDialog(self.parent, selected_date=date)
+            
+            # Setze die entsprechende Stunde
+            for row in range(dialog.lessons_table.rowCount()):
+                time_item = dialog.lessons_table.item(row, 0)
+                if time_item:
+                    item_time = time_item.text().split(" - ")[0]
+                    if item_time == time:
+                        checkbox = dialog.lessons_table.cellWidget(row, 1)
+                        if checkbox:
+                            checkbox.setChecked(True)
+                        break
+            
+            if dialog.exec():
+                lessons_data = dialog.get_data()
+                for lesson_data in lessons_data:
+                    self.parent.db.add_lesson(lesson_data)
+                
+                # Aktualisiere Kalenderansichten
+                self.update_all(date)
+                
+                # Update week view wenn nötig
+                if hasattr(self.calendar_container, 'week_view'):
+                    week_view = self.calendar_container.stack.widget(1)  # WeekView ist im zweiten Slot
+                    if week_view:
+                        week_view.update_view(week_view.week_navigator.current_week_start)
+                
+                self.parent.statusBar().showMessage("Stunde wurde hinzugefügt", 3000)
+                
+        except Exception as e:
+            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Hinzufügen der Stunde: {str(e)}")
+
     def edit_lesson(self, lesson_id):
         """Bearbeitet existierende Unterrichtsstunde(n)"""
         try:
@@ -122,7 +159,13 @@ class ListManager:
                         update_all_following
                     )
                     
+                    # Aktualisiere Tagesliste
                     self.update_day_list(self.calendar_container.get_selected_date())
+
+                    # Aktualisiere WeekView falls vorhanden
+                    if hasattr(self.calendar_container, 'week_view'):
+                        current_week = self.calendar_container.week_view.week_navigator.current_week_start
+                        self.calendar_container.week_view.update_view(current_week)
                     
                     msg = "Alle folgenden Stunden wurden aktualisiert" if update_all_following \
                           else "Stunde wurde aktualisiert"
