@@ -1,8 +1,8 @@
 from PyQt6.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-                           QVBoxLayout, QMenu, QMessageBox)
+                           QVBoxLayout, QMenu, QStyledItemDelegate, QMessageBox)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
-from PyQt6.QtGui import QColor, QBrush
-from .week_navigator import WeekNavigator
+from PyQt6.QtGui import QColor, QBrush, QTextDocument, QAbstractTextDocumentLayout
+from .week_navigator import WeekNavigator  # Am Anfang der Datei hinzufügen
 
 class WeekView(QWidget):
     """Widget zur Anzeige des Wochenstundenplans"""
@@ -18,7 +18,6 @@ class WeekView(QWidget):
         self.setup_context_menu()
 
     def setup_ui(self):
-        """Initialisiert die Benutzeroberfläche"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
@@ -31,7 +30,10 @@ class WeekView(QWidget):
         self.table = QTableWidget()
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         
-        # Rest des bisherigen setup_ui Codes...
+        # HTML-Delegate setzen
+        from PyQt6.QtGui import QTextDocument, QAbstractTextDocumentLayout 
+        self.table.setItemDelegate(HTMLDelegate(self.table))
+        
         self.table.setColumnCount(5)
         weekdays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag']
         self.table.setHorizontalHeaderLabels(weekdays)
@@ -54,7 +56,6 @@ class WeekView(QWidget):
                 border: 1px solid #d0d0d0;
             }
         """)
-        
         layout.addWidget(self.table)
 
     def update_time_slots(self):
@@ -198,7 +199,7 @@ class WeekView(QWidget):
         item = QTableWidgetItem()
         
         # Text formatieren
-        text = f"{lesson['subject']}\n{lesson['course_name']}"
+        text = f"<b>{ lesson['subject']}\n{lesson['course_name']}</b><br><br>"
         if lesson.get('topic'):
             text += f"\n{lesson['topic']}"
             
@@ -229,3 +230,17 @@ class WeekView(QWidget):
             'Musik': QColor('#E5FFE5'),       # Hellgrün
         }
         return colors.get(subject, QColor('#FFFFFF'))  # Weiß als Standard
+
+
+
+class HTMLDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.doc = QTextDocument(self)
+
+    def paint(self, painter, option, index):
+        painter.save()
+        self.doc.setHtml(index.data())
+        painter.translate(option.rect.topLeft())
+        self.doc.documentLayout().draw(painter, QAbstractTextDocumentLayout.PaintContext())
+        painter.restore()
