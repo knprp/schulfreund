@@ -170,41 +170,22 @@ class WeekView(QWidget):
         current_date = week_start
         for day in range(5):  # Mo-Fr
             date_str = current_date.toString("yyyy-MM-dd")
-            print(f"\nGetting lessons for {date_str}")
             lessons = self.parent.db.get_lessons_by_date(date_str)
-            print(f"Got {len(lessons) if lessons else 0} lessons")
             
             # Füge Stunden in die entsprechenden Zellen ein
             for lesson in lessons:
-                # DEBUG
-                date_str = current_date.toString("yyyy-MM-dd")
-                print(f"\nGetting lessons for {date_str}")
-                lessons = self.parent.db.get_lessons_by_date(date_str)
-                print(f"Got {len(lessons) if lessons else 0} lessons")
-                
-                if lessons:
-                    print("\nDetailed lesson information:")
-                    for lesson in lessons:
-                        print(f"Lesson ID: {lesson.get('id')}")
-                        print(f"  Course: {lesson.get('course_name')}")
-                        print(f"  Subject: {lesson.get('subject')}")
-                        print(f"  Color: {lesson.get('course_color')}")
-                        print(f"  All keys: {lesson.keys()}")
-                    time = lesson['time']
+                time = lesson['time']
                 row = self.get_row_for_time(time)
                 if row >= 0:
                     item = self.create_lesson_item(lesson)
                     self.table.setItem(row, day, item)
                     
                     if lesson.get('duration', 1) == 2 and row < self.table.rowCount() - 1:
-                        print(f"Setting span for row {row}, col {day}")
                         self.table.setSpan(row, day, 2, 1)
                         if self.table.item(row + 1, day):
                             self.table.takeItem(row + 1, day)
             
             current_date = current_date.addDays(1)
-        
-        print("=== END DEBUG ===\n")
 
     def get_row_for_time(self, time: str) -> int:
         """Ermittelt die Tabellenzeile für eine bestimmte Uhrzeit"""
