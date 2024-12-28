@@ -1,8 +1,10 @@
+# src/views/week_view.py
+
 from PyQt6.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-                           QVBoxLayout, QMenu, QStyledItemDelegate, QMessageBox)
-from PyQt6.QtCore import Qt, QDate, pyqtSignal
+                           QVBoxLayout, QMenu, QStyledItemDelegate, QMessageBox, QStyle)
+from PyQt6.QtCore import Qt, QDate, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QBrush, QTextDocument, QAbstractTextDocumentLayout
-from .week_navigator import WeekNavigator  # Am Anfang der Datei hinzufügen
+from .week_navigator import WeekNavigator
 
 class WeekView(QWidget):
     """Widget zur Anzeige des Wochenstundenplans"""
@@ -161,29 +163,51 @@ class WeekView(QWidget):
 
     def update_view(self, week_start: QDate):
         """Aktualisiert die Ansicht für die gewählte Woche"""
-        # Existierende Methode anpassen, um week_start zu verwenden
+        # Debug
+        print("\n=== DEBUG update_view ===")
+        print("Updating view for week starting:", week_start.toString("yyyy-MM-dd"))
+        
         self.table.clearContents()
         
         # Hole die Daten für jeden Tag der Woche
-        current_date = week_start  # Statt direkt week_start zu setzen
+        current_date = week_start
         for day in range(5):  # Mo-Fr
             date_str = current_date.toString("yyyy-MM-dd")
+            print(f"\nGetting lessons for {date_str}")
             lessons = self.parent.db.get_lessons_by_date(date_str)
+            print(f"Got {len(lessons) if lessons else 0} lessons")
             
-            # Rest des bisherigen update_view Codes...
+            # Füge Stunden in die entsprechenden Zellen ein
             for lesson in lessons:
-                time = lesson['time']
+                # DEBUG
+                date_str = current_date.toString("yyyy-MM-dd")
+                print(f"\nGetting lessons for {date_str}")
+                lessons = self.parent.db.get_lessons_by_date(date_str)
+                print(f"Got {len(lessons) if lessons else 0} lessons")
+                
+                if lessons:
+                    print("\nDetailed lesson information:")
+                    for lesson in lessons:
+                        print(f"Lesson ID: {lesson.get('id')}")
+                        print(f"  Course: {lesson.get('course_name')}")
+                        print(f"  Subject: {lesson.get('subject')}")
+                        print(f"  Color: {lesson.get('course_color')}")
+                        print(f"  All keys: {lesson.keys()}")
+                    time = lesson['time']
                 row = self.get_row_for_time(time)
                 if row >= 0:
                     item = self.create_lesson_item(lesson)
                     self.table.setItem(row, day, item)
                     
                     if lesson.get('duration', 1) == 2 and row < self.table.rowCount() - 1:
+                        print(f"Setting span for row {row}, col {day}")
                         self.table.setSpan(row, day, 2, 1)
                         if self.table.item(row + 1, day):
                             self.table.takeItem(row + 1, day)
-                    
+            
             current_date = current_date.addDays(1)
+        
+        print("=== END DEBUG ===\n")
 
     def get_row_for_time(self, time: str) -> int:
         """Ermittelt die Tabellenzeile für eine bestimmte Uhrzeit"""
@@ -198,10 +222,15 @@ class WeekView(QWidget):
         """Erstellt ein TableWidgetItem für eine Unterrichtsstunde"""
         item = QTableWidgetItem()
         
+        print("\n=== DEBUG create_lesson_item ===")
+        print("Full lesson dict:", lesson)
+        print("Available keys:", lesson.keys())
+        print("Direct course_color access:", lesson.get('course_color'))
+        
         # Text formatieren
-        text = f"<b>{ lesson['subject']}\n{lesson['course_name']}</b><br><br>"
+        text = f"<b>{lesson['subject']} {lesson['course_name']}</b>"
         if lesson.get('topic'):
-            text += f"\n{lesson['topic']}"
+            text += f"<br>{lesson['topic']}"
             
         item.setText(text)
         item.setData(Qt.ItemDataRole.UserRole, lesson['id'])
@@ -209,9 +238,21 @@ class WeekView(QWidget):
         # Zentrieren und Mehrzeiligkeit erlauben
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         
-        # Hintergrundfarbe basierend auf Fach
-        color = self.get_subject_color(lesson['subject'])
+        # Debug: Farbe Schritt für Schritt
+        course_color = lesson.get('course_color')
+        print("Got course_color:", course_color)
+        
+        if course_color:
+            print("Creating QColor with:", course_color)
+            color = QColor(course_color)
+            print("Created color:", color.name())
+        else:
+            print("Using fallback color")
+            color = self.get_subject_color(lesson['subject'])
+            print("Fallback color:", color.name())
+        
         item.setBackground(QBrush(color))
+        print("=== END DEBUG ===\n")
         
         return item
 
@@ -240,7 +281,33 @@ class HTMLDelegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         painter.save()
+
+        # Zeichne den Hintergrund
+        background = index.data(Qt.ItemDataRole.BackgroundRole)
+        if background:
+            painter.fillRect(option.rect, background)
+                
+        # Setze den HTML-Content
         self.doc.setHtml(index.data())
-        painter.translate(option.rect.topLeft())
+        
+        # Text-Ränder
+        margin = 5
+        text_rect = option.rect.adjusted(margin, margin, -margin, -margin)
+        
+        # Zentriere den Text vertikal
+        clip_rect = text_rect
+        text_height = self.doc.size().height()
+        if text_height < text_rect.height():
+            y_offset = int((text_rect.height() - text_height) // 2)
+            text_rect.moveTop(text_rect.top() + y_offset)
+            
+        # Zeichne den Text
+        painter.translate(text_rect.topLeft())
+        painter.setClipRect(clip_rect.translated(-text_rect.topLeft()))
         self.doc.documentLayout().draw(painter, QAbstractTextDocumentLayout.PaintContext())
+        
         painter.restore()
+
+    def sizeHint(self, option, index):
+        self.doc.setHtml(index.data())
+        return QSize(self.doc.idealWidth(), self.doc.size().height())
