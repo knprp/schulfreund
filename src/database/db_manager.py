@@ -236,59 +236,60 @@ class DatabaseManager:
         try:
             if not data.get('course_id'):
                 raise ValueError("Eine Unterrichtsstunde muss einem Kurs zugeordnet sein")
-
+                
             if data.get('is_recurring'):
                 # Semesterdaten holen
                 semester = self.get_semester_dates()
                 if not semester:
                     raise ValueError("Kein aktives Halbjahr gefunden")
-
                 # Wochentag bestimmen
                 start_date = datetime.strptime(data['date'], "%Y-%m-%d")
                 weekday = start_date.isoweekday()
-                    
-                # Hash generieren - hier die wichtige Änderung
+                # Hash generieren
                 time_str = data['time'] if isinstance(data['time'], str) else data['time'][0]
                 rec_hash = self.generate_recurring_hash(
-                    data['course_id'], 
+                    data['course_id'],
                     weekday,
                     time_str
                 )
-                    
                 # Alle Termine bis Semesterende erstellen
                 lesson_ids = []
                 current_date = start_date
                 end_date = datetime.strptime(semester['semester_end'], "%Y-%m-%d")
-                    
+                
                 while current_date <= end_date:
                     if current_date.isoweekday() == weekday:
                         cursor = self.execute(
-                            """INSERT INTO lessons 
+                            """INSERT INTO lessons
                             (course_id, date, time, subject, topic, recurring_hash, duration)
                             VALUES (?, ?, ?, ?, ?, ?, ?)""",
                             (data['course_id'],
-                            data['date'],
+                            current_date.strftime("%Y-%m-%d"),
                             data['time'],
                             data['subject'],
                             data.get('topic', ''),
                             rec_hash,
-                            data.get('duration', 1))  # Duration hinzugefügt
+                            data.get('duration', 1))
                         )
-                    else:
-                        # Normale einzelne Unterrichtsstunde
-                        cursor = self.execute(
-                            """INSERT INTO lessons 
-                            (course_id, date, time, subject, topic, duration)
-                            VALUES (?, ?, ?, ?, ?, ?)""",
-                            (data['course_id'], 
-                            data['date'], 
-                            data['time'], 
-                            data['subject'],
-                            data.get('topic', ''),
-                            data.get('duration', 1))  # Duration hinzugefügt
-                        )
-                    return cursor.lastrowid
-
+                        lesson_ids.append(cursor.lastrowid)
+                    current_date += timedelta(days=1)
+                return lesson_ids  # Gebe alle IDs zurück
+            
+            else:
+                # Normale einzelne Unterrichtsstunde
+                cursor = self.execute(
+                    """INSERT INTO lessons
+                    (course_id, date, time, subject, topic, duration)
+                    VALUES (?, ?, ?, ?, ?, ?)""",
+                    (data['course_id'],
+                    data['date'],
+                    data['time'],
+                    data['subject'],
+                    data.get('topic', ''),
+                    data.get('duration', 1))
+                )
+                return cursor.lastrowid
+                
         except Exception as e:
             raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {str(e)}")
 
