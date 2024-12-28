@@ -163,9 +163,6 @@ class WeekView(QWidget):
 
     def update_view(self, week_start: QDate):
         """Aktualisiert die Ansicht für die gewählte Woche"""
-        # Debug
-        print("\n=== DEBUG update_view ===")
-        print("Updating view for week starting:", week_start.toString("yyyy-MM-dd"))
         
         self.table.clearContents()
         
