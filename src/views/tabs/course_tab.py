@@ -61,6 +61,7 @@ class CourseTab(QWidget):
                     course.type = data['type']
                     course.subject = data['subject']
                     course.description = data['description']
+                    course.color = data['color']
                     course.update(self.parent.db)
                     self.refresh_courses()
                     self.parent.statusBar().showMessage(f"Kurs {data['name']} wurde aktualisiert", 3000)

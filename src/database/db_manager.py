@@ -92,7 +92,7 @@ class DatabaseManager:
                 )
             ''')
             
-                    # Verknüpfungstabelle für Stunden und Kompetenzen
+            # Verknüpfungstabelle für Stunden und Kompetenzen
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS lesson_competencies (
                     lesson_id INTEGER,
@@ -103,7 +103,7 @@ class DatabaseManager:
                 )
             ''')     
 
-                # Kurse/Klassen Tabelle
+            # Kurse/Klassen Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS courses (
                     id INTEGER PRIMARY KEY,
@@ -111,6 +111,7 @@ class DatabaseManager:
                     type TEXT NOT NULL CHECK(type IN ('class', 'course')),
                     subject TEXT,
                     description TEXT,
+                    color TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -185,9 +186,9 @@ class DatabaseManager:
                                       
 
                    # Indizes für bessere Performance
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_lesson ON grades(lesson_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_competency ON grades(competency_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_lesson ON grades(lesson_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_competency ON grades(competency_id)')
   
 
     # Student-bezogene Methoden
@@ -293,11 +294,32 @@ class DatabaseManager:
 
     def get_lessons_by_date(self, date: str) -> List[Dict[str, Any]]:
         """Holt alle Unterrichtsstunden für ein bestimmtes Datum."""
-        cursor = self.execute(
-            "SELECT * FROM lessons WHERE date = ? ORDER BY time",
-            (date,)
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        print("\n=== DEBUG get_lessons_by_date ===")
+        
+        # Erst alle Lektionen anzeigen
+        cursor = self.execute("SELECT DISTINCT date FROM lessons ORDER BY date")
+        dates = [row['date'] for row in cursor.fetchall()]
+        print("Available dates in lessons:", dates)
+        
+        # Dann die eigentliche Query
+        query = """
+            SELECT 
+                l.*,
+                c.name as course_name,
+                c.color as course_color
+            FROM lessons l
+            JOIN courses c ON l.course_id = c.id
+            WHERE l.date = ?
+        """
+        
+        cursor = self.execute(query, (date,))
+        results = [dict(row) for row in cursor.fetchall()]
+        print(f"\nFound {len(results)} lessons for date {date}")
+        if results:
+            print("First lesson:", results[0])
+        
+        print("=== END DEBUG ===")
+        return results
 
     def get_all_lessons(self) -> List[Dict[str, Any]]:
         """Holt alle Unterrichtsstunden."""
@@ -688,17 +710,6 @@ class DatabaseManager:
         result = cursor.fetchone()
         return dict(result) if result else None
 
-    def get_lessons_by_date(self, date: str) -> List[Dict[str, Any]]:
-        """Holt alle Unterrichtsstunden für ein bestimmtes Datum."""
-        cursor = self.execute(
-            """SELECT l.*, c.name as course_name
-            FROM lessons l
-            JOIN courses c ON l.course_id = c.id
-            WHERE l.date = ? 
-            ORDER BY l.time""",
-            (date,)
-        )
-        return [dict(row) for row in cursor.fetchall()]
 
     def save_semester_to_history(self, start_date: str, end_date: str, name: str = None, notes: str = None) -> int:
         """Speichert ein Halbjahr in der Historie."""
@@ -793,3 +804,17 @@ class DatabaseManager:
                 
         except Exception as e:
             raise Exception(f"Fehler beim Löschen der Stunde(n): {str(e)}")
+
+    def test_color_query(self, date: str):
+        """Test-Methode um die Farbabruf zu debuggen"""
+        cursor = self.execute(
+            """
+            SELECT l.id as lesson_id, c.color
+            FROM lessons l
+            JOIN courses c ON l.course_id = c.id
+            WHERE l.date = ?
+            """,
+            (date,)
+        )
+        for row in cursor.fetchall():
+            print(f"TEST COLOR QUERY - Lesson {row['lesson_id']}: {row['color']}")

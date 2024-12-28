@@ -6,16 +6,17 @@ from typing import List, Optional, Dict
 class Course:
     def __init__(self, id: Optional[int] = None, name: str = "", 
                  type: str = "course", subject: Optional[str] = None,
-                 description: Optional[str] = None):
+                 description: Optional[str] = None, color: Optional[str] = None):
         self.id = id
         self.name = name
         self.type = type
         self.subject = subject
         self.description = description
+        self.color = color
 
     @staticmethod
     def create(db, name: str, type: str = "course", subject: Optional[str] = None,
-               description: Optional[str] = None) -> 'Course':
+            description: Optional[str] = None, color: Optional[str] = None) -> 'Course':
         """Erstellt einen neuen Kurs in der Datenbank."""
         if not name or not name.strip():
             raise ValueError("Der Name darf nicht leer sein")
@@ -23,11 +24,11 @@ class Course:
             raise ValueError("Typ muss 'class' oder 'course' sein")
             
         cursor = db.execute(
-            """INSERT INTO courses (name, type, subject, description) 
-               VALUES (?, ?, ?, ?)""",
-            (name.strip(), type, subject, description)
+            """INSERT INTO courses (name, type, subject, description, color) 
+            VALUES (?, ?, ?, ?, ?)""",
+            (name.strip(), type, subject, description, color)
         )
-        return Course(cursor.lastrowid, name, type, subject, description)
+        return Course(cursor.lastrowid, name, type, subject, description, color)
 
     @staticmethod
     def get_by_id(db, course_id: int) -> Optional['Course']:
@@ -43,7 +44,8 @@ class Course:
                 name=row['name'],
                 type=row['type'],
                 subject=row['subject'],
-                description=row['description']
+                description=row['description'],
+                color=row['color']
             )
         return None
 
@@ -89,7 +91,8 @@ class Course:
             name=row['name'],
             type=row['type'],
             subject=row['subject'],
-            description=row['description']
+            description=row['description'],
+            color=row['color']
         ) for row in cursor.fetchall()]
 
     def update(self, db) -> None:
@@ -99,10 +102,10 @@ class Course:
             
         db.execute(
             """UPDATE courses 
-               SET name = ?, type = ?, subject = ?, description = ?,
-                   updated_at = CURRENT_TIMESTAMP
-               WHERE id = ?""",
-            (self.name, self.type, self.subject, self.description, self.id)
+            SET name = ?, type = ?, subject = ?, description = ?, color = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?""",
+            (self.name, self.type, self.subject, self.description, self.color, self.id)
         )
 
     def delete(self, db) -> None:
