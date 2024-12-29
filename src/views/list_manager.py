@@ -1,6 +1,6 @@
 from PyQt6.QtGui import QStandardItemModel, QStandardItem
 from PyQt6.QtWidgets import QMessageBox, QMenu
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QDateTime, QTime
 from datetime import datetime, timedelta
 
 
@@ -18,22 +18,21 @@ class ListManager:
 
     def setup_models(self):
         """Erstellt die Datenmodelle für die Listen"""
-        self.day_model = QStandardItemModel()
+        # Nur noch focus und events als Models, da day_schedule eigenes Model hat
         self.focus_model = QStandardItemModel()
         self.events_model = QStandardItemModel()
 
     def connect_models(self):
         """Verbindet die Modelle mit den ListView-Widgets"""
-        self.calendar_container.lessons_list.setModel(self.day_model)
         self.calendar_container.focus_list.setModel(self.focus_model)
         self.calendar_container.events_list.setModel(self.events_model)
 
     def setup_connections(self):
         """Richtet alle Signal-Verbindungen ein"""
         # Kontext-Menü für Tagesliste
-        lessons_list = self.calendar_container.lessons_list
-        lessons_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        lessons_list.customContextMenuRequested.connect(self.show_lesson_context_menu)
+        day_schedule = self.calendar_container.day_schedule
+        day_schedule.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        day_schedule.customContextMenuRequested.connect(self.show_lesson_context_menu)
         
         # Add-Button
         self.calendar_container.add_lesson_btn.clicked.connect(self.add_day_lesson)
@@ -45,21 +44,71 @@ class ListManager:
         self.update_events_list(date)
 
     def update_day_list(self, date):
-        """Aktualisiert die Tagesliste"""
-        self.day_model.clear()
+        """Aktualisiert die Liste der Unterrichtsstunden für das ausgewählte Datum"""
         try:
+            # Zeit- und Datumsvergleiche
+            current_datetime = QDateTime.currentDateTime()
+            current_time = current_datetime.time()
+            is_today = date == QDate.currentDate()
+            
+            # Hole alle Stunden für den Tag
             lessons = self.parent.db.get_lessons_by_date(date.toString("yyyy-MM-dd"))
-            if lessons:
-                for lesson in lessons:
-                    item = QStandardItem(
-                        f"{lesson['time']} - {lesson['subject']}: {lesson.get('topic', '')}"
-                    )
-                    item.setData(lesson['id'], Qt.ItemDataRole.UserRole)
-                    self.day_model.appendRow(item)
-            else:
-                self.day_model.appendRow(QStandardItem("Keine Stunden für diesen Tag"))
+            
+            # Referenz auf die TableView
+            day_schedule = self.calendar_container.day_schedule
+            day_schedule.clear_schedule()
+            
+            if not lessons:
+                day_schedule.add_lesson(
+                    "---", "---", "---",
+                    "Keine Stunden für diesen Tag", "---"
+                )
+                return
+                
+            for lesson in lessons:
+                # Zeitberechnung
+                start_time = QTime.fromString(lesson['time'], "HH:mm")
+                end_time = start_time.addSecs(45 * 60)
+                time_slot = f"{start_time.toString('HH:mm')} - {end_time.toString('HH:mm')}"
+                
+                # Status bestimmen
+                status = "kommend"
+                if date < QDate.currentDate():
+                    status = "vergangen"
+                elif is_today:
+                    if current_time > end_time:
+                        # Vergangene Stunde
+                        if not lesson.get('topic'):
+                            status = "kein Thema"
+                        else:
+                            # Überspringen wenn vergangen und Thema gesetzt
+                            continue
+                    elif current_time >= start_time:
+                        status = "aktuell"
+                
+                # Stunde zur Tabelle hinzufügen
+                course_name = lesson.get('course_name', '')
+                subject = lesson.get('subject', '')
+                topic = lesson.get('topic', '')
+                
+                day_schedule.add_lesson(
+                    time_slot,
+                    course_name,
+                    subject,
+                    topic,
+                    status,
+                    lesson['id']
+                )
+            
+            # Sortiere nach Zeit
+            day_schedule.model.sort(0)
+            
         except Exception as e:
-            QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Laden der Stunden: {str(e)}")
+            QMessageBox.critical(
+                self.parent,
+                "Fehler",
+                f"Fehler beim Laden der Stunden: {str(e)}"
+            )
 
     def update_focus_list(self, date):
         """Aktualisiert die 'Achte heute auf'-Liste"""
@@ -178,21 +227,20 @@ class ListManager:
 
     def show_lesson_context_menu(self, pos):
         """Zeigt das Kontext-Menü für eine Unterrichtsstunde"""
-        list_view = self.calendar_container.lessons_list
-        index = list_view.indexAt(pos)
-        if not index.isValid():
+        # Hole die lesson_id von der TableView
+        day_schedule = self.calendar_container.day_schedule
+        lesson_id = day_schedule.get_lesson_id_at_position(pos)
+        
+        if lesson_id is None:
             return
-            
+                
         menu = QMenu()
         edit_action = menu.addAction("Bearbeiten")
         delete_action = menu.addAction("Löschen")
         
-        action = menu.exec(list_view.viewport().mapToGlobal(pos))
+        action = menu.exec(day_schedule.viewport().mapToGlobal(pos))
         if not action:
             return
-            
-        item = self.day_model.itemFromIndex(index)
-        lesson_id = item.data(Qt.ItemDataRole.UserRole)
         
         if action == edit_action:
             self.edit_lesson(lesson_id)
