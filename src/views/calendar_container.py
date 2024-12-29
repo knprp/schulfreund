@@ -1,10 +1,15 @@
 # src/views/calendar_container.py
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, 
-                           QPushButton, QListView, QLabel, QCalendarWidget)
+
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QGridLayout,
+                           QPushButton, QStackedWidget, QCalendarWidget, 
+                           QListView, QLabel)
 from PyQt6.QtCore import Qt, QDate
 from src.views.week_view import WeekView
+from src.views.day_schedule_view import DayScheduleView  # Neue Import
 
 class CalendarContainer(QWidget):
+    """Container für das Layout der Kalenderansicht."""
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -12,57 +17,55 @@ class CalendarContainer(QWidget):
 
     def setup_ui(self):
         """Erstellt das Layout mit allen UI-Elementen"""
-        # Hauptlayout als QHBoxLayout
-        main_layout = QHBoxLayout(self)
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Linker Bereich (Kalender/WeekView)
-        left_layout = QVBoxLayout()
-        
-        # Toggle-Button und "+" in einer Reihe
-        button_layout = QHBoxLayout()
+        grid_layout = QGridLayout(self)
+        grid_layout.setSpacing(10)
+
+        # Umschalt-Button für die Ansichten
         self.view_toggle = QPushButton("Zur Wochenansicht")
         self.view_toggle.clicked.connect(self.toggle_view)
-        button_layout.addWidget(self.view_toggle)
-        
-        self.add_lesson_btn = QPushButton("+")
-        button_layout.addWidget(self.add_lesson_btn)
-        button_layout.addStretch()
-        left_layout.addLayout(button_layout)
-        
+        grid_layout.addWidget(self.view_toggle, 0, 0, 1, 1)
+
         # StackedWidget für Kalender/Wochenansicht
         self.stack = QStackedWidget()
+        
+        # Kalenderansicht
         self.calendar_widget = QCalendarWidget()
         self.calendar_widget.clicked.connect(self.on_date_selected)
+        
+        # Wochenansicht
         self.week_view = WeekView(self.parent)
         
         self.stack.addWidget(self.calendar_widget)
         self.stack.addWidget(self.week_view)
-        left_layout.addWidget(self.stack)
         
-        main_layout.addLayout(left_layout, stretch=7)  # 70% der Breite
+        grid_layout.addWidget(self.stack, 1, 0, 1, 2)
+
+        # "+" Button für neue Stunden
+        self.add_lesson_btn = QPushButton("+")
+        grid_layout.addWidget(self.add_lesson_btn, 0, 1)
+
+        # Stunden des Tages (jetzt mit TableView)
+        lessons_label = QLabel("<b>Stunden des Tages</b>")
+        grid_layout.addWidget(lessons_label, 0, 2)
         
-        # Rechter Bereich (Listen)
-        right_layout = QVBoxLayout()
-        right_layout.setSpacing(5)
+        self.day_schedule = DayScheduleView(self)
+        grid_layout.addWidget(self.day_schedule, 1, 2)
+
+        # Wichtige Ereignisse (bleibt ListView)
+        events_label = QLabel("<b>Wichtige Ereignisse</b>")
+        grid_layout.addWidget(events_label, 2, 0)
         
-        # Stunden des Tages
-        right_layout.addWidget(QLabel("<b>Stunden des Tages</b>"))
-        self.lessons_list = QListView()
-        right_layout.addWidget(self.lessons_list)
-        
-        # Wichtige Ereignisse
-        right_layout.addWidget(QLabel("<b>Wichtige Ereignisse</b>"))
         self.events_list = QListView()
-        right_layout.addWidget(self.events_list)
+        grid_layout.addWidget(self.events_list, 3, 0, 1, 2)
+
+        # Achte heute auf (bleibt ListView)
+        focus_label = QLabel("<b>Achte heute auf</b>")
+        grid_layout.addWidget(focus_label, 2, 2)
         
-        # Achte heute auf
-        right_layout.addWidget(QLabel("<b>Achte heute auf</b>"))
         self.focus_list = QListView()
-        right_layout.addWidget(self.focus_list)
+        grid_layout.addWidget(self.focus_list, 3, 2)
         
-        main_layout.addLayout(right_layout, stretch=3)  # 30% der Breite
+        # grid_layout.addLayout(right_layout, stretch=3)  # 30% der Breite
 
     def toggle_view(self):
         """Wechselt zwischen Kalender- und Wochenansicht"""
