@@ -53,72 +53,94 @@ class ListManager:
             # Hole Stunden und Zeitslots
             lessons = self.parent.db.get_lessons_by_date(date.toString("yyyy-MM-dd"))
             time_slots = self.get_time_slots()
-            
             day_schedule = self.calendar_container.day_schedule
             day_schedule.clear_schedule()
             
+            # Wenn keine Stunden heute, zeige das an
             if not lessons:
                 day_schedule.add_lesson(
                     "---", "---", "---",
-                    "Keine Stunden für diesen Tag", "---"
+                    "Heute keine Stunden", "---"
                 )
-                return
-
-            # Erstelle ein Dictionary für schnellen Zugriff auf die Slots
-            slot_dict = {}
-            for i, (start, end, number) in enumerate(time_slots):
-                slot_dict[start.toString("HH:mm")] = (start, end, i)  # i statt number!
-                
-            for lesson in lessons:
-                start_time_str = lesson['time']
-                if start_time_str not in slot_dict:
-                    print(f"Warnung: Keine Slot-Konfiguration für Zeit {start_time_str}")
-                    continue
+            else:
+                # Zeige heutige Stunden
+                slot_dict = {}
+                for i, (start, end, number) in enumerate(time_slots):
+                    slot_dict[start.toString("HH:mm")] = (start, end, i)
                     
-                start_time, base_end_time, slot_index = slot_dict[start_time_str]
-                duration = lesson.get('duration', 1)
-                
-                # Bei Doppelstunden: Ende der zweiten Stunde verwenden
-                target_slot = slot_index + duration - 1
-                if duration > 1 and target_slot < len(time_slots):
-                    _, end_time, _ = time_slots[target_slot]
-                else:
-                    end_time = base_end_time
-                    
-                time_slot = f"{start_time.toString('HH:mm')} - {end_time.toString('HH:mm')}"
-                
-                # Prüfe ob die Stunde vergangen ist
-                is_past = False
-                if date < QDate.currentDate():
-                    is_past = True
-                elif is_today and current_time > end_time:
-                    is_past = True
-                    
-                # Statusbestimmung
-                if is_past:
-                    if lesson.get('topic'):
+                for lesson in lessons:
+                    start_time_str = lesson['time']
+                    if start_time_str not in slot_dict:
+                        print(f"Warnung: Keine Slot-Konfiguration für Zeit {start_time_str}")
                         continue
-                    status = "kein Thema"
-                elif is_today and current_time >= start_time:
-                    status = "aktuell"
-                else:
-                    status = "kommend"
-                
-                course_name = lesson.get('course_name', '')
-                subject = lesson.get('subject', '')
-                topic = lesson.get('topic', '')
-                
-                day_schedule.add_lesson(
-                    time_slot,
-                    course_name,
-                    subject,
-                    topic,
-                    status,
-                    lesson['id']
-                )
+                        
+                    start_time, base_end_time, slot_index = slot_dict[start_time_str]
+                    duration = lesson.get('duration', 1)
+                    
+                    # Bei Doppelstunden: Ende der zweiten Stunde verwenden
+                    target_slot = slot_index + duration - 1
+                    if duration > 1 and target_slot < len(time_slots):
+                        _, end_time, _ = time_slots[target_slot]
+                    else:
+                        end_time = base_end_time
+                        
+                    time_slot = f"{start_time.toString('HH:mm')} - {end_time.toString('HH:mm')}"
+                    
+                    # Prüfe ob die Stunde vergangen ist
+                    is_past = False
+                    if date < QDate.currentDate():
+                        is_past = True
+                    elif is_today and current_time > end_time:
+                        is_past = True
+                        
+                    # Bestimme Status und zeige an
+                    if is_past:
+                        if not lesson.get('topic'):
+                            day_schedule.add_lesson(
+                                time_slot,
+                                lesson['course_name'],
+                                lesson['subject'],
+                                "Kein Thema eingetragen",
+                                "kein Thema",
+                                lesson['id'],
+                                lesson.get('course_color')
+                            )
+                    else:
+                        if is_today and current_time >= start_time and current_time <= end_time:
+                            status = "aktuell"
+                        else:
+                            status = "kommend"
+                            
+                        day_schedule.add_lesson(
+                            time_slot,
+                            lesson['course_name'],
+                            lesson['subject'],
+                            lesson.get('topic', ''),
+                            status,
+                            lesson['id'],
+                            lesson.get('course_color')
+                        )
             
-            day_schedule.model.sort(0)
+            # Hole und zeige die nächsten Stunden pro Kurs
+            next_lessons = self.parent.db.get_next_lesson_by_course(date.toString("yyyy-MM-dd"))
             
+            if next_lessons:
+                day_schedule.add_separator("Nächste Stunden pro Kurs")
+                
+                for lesson in next_lessons:
+                    lesson_date = QDate.fromString(lesson['date'], "yyyy-MM-dd")
+                    date_str = lesson_date.toString("dd.MM.")
+                    
+                    day_schedule.add_lesson(
+                        f"{date_str} {lesson['time']}",
+                        lesson['course_name'],
+                        lesson['subject'],
+                        lesson.get('topic', ''),
+                        "nächste",
+                        lesson['id'],
+                        lesson.get('course_color')
+                    )
+                    
         except Exception as e:
             QMessageBox.critical(
                 self.parent,

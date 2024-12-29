@@ -323,11 +323,60 @@ class DatabaseManager:
         return results
 
     def get_all_lessons(self) -> List[Dict[str, Any]]:
-        """Holt alle Unterrichtsstunden."""
-        cursor = self.execute(
-            "SELECT * FROM lessons ORDER BY date, time"
-        )
-        return [dict(row) for row in cursor.fetchall()]
+            """Holt alle Unterrichtsstunden."""
+            cursor = self.execute(
+                "SELECT * FROM lessons ORDER BY date, time"
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_next_lesson_by_course(self, date: str) -> List[Dict[str, Any]]:
+        """Holt für jeden Kurs die nächste anstehende Stunde nach einem Datum."""
+        try:
+            query = """
+                SELECT 
+                    l.*,
+                    c.name as course_name,
+                    c.color as course_color
+                FROM lessons l
+                JOIN courses c ON l.course_id = c.id
+                WHERE l.date >= ?
+                ORDER BY l.date, l.time
+            """
+            cursor = self.execute(query, (date,))
+            all_lessons = [dict(row) for row in cursor.fetchall()]
+            
+            # Dictionary für die nächsten Stunden pro Kurs
+            next_lessons = {}
+            current_time = datetime.now()
+            current_time_str = current_time.strftime("%H:%M")
+            
+            # Hole Zeiteinstellungen für Stundenlänge
+            settings = self.get_time_settings()
+            lesson_duration = 45  # Standard-Stundenlänge in Minuten
+            if settings and 'lesson_duration' in settings:
+                lesson_duration = settings['lesson_duration']
+            
+            for lesson in all_lessons:
+                course_id = lesson['course_id']
+                if course_id in next_lessons:
+                    continue
+                    
+                # Berechne Endzeit der Stunde
+                lesson_time = datetime.strptime(lesson['time'], "%H:%M")
+                lesson_end = (lesson_time + timedelta(minutes=lesson_duration * 
+                                                    (lesson.get('duration', 1)))).time()
+                
+                # Überspringe Stunden vom aktuellen Tag die schon vorbei sind
+                if (lesson['date'] == date and 
+                    lesson_end.strftime("%H:%M") <= current_time_str):
+                    continue
+                    
+                next_lessons[course_id] = lesson
+                
+            return list(next_lessons.values())
+                    
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der nächsten Stunden: {str(e)}")
 
     # Kompetenz-bezogene Methoden
     def add_competency(self, data: dict) -> int:
