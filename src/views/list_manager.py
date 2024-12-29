@@ -46,15 +46,14 @@ class ListManager:
     def update_day_list(self, date):
         """Aktualisiert die Liste der Unterrichtsstunden für das ausgewählte Datum"""
         try:
-            # Zeit- und Datumsvergleiche
             current_datetime = QDateTime.currentDateTime()
             current_time = current_datetime.time()
             is_today = date == QDate.currentDate()
             
-            # Hole alle Stunden für den Tag
+            # Hole Stunden und Zeitslots
             lessons = self.parent.db.get_lessons_by_date(date.toString("yyyy-MM-dd"))
+            time_slots = self.get_time_slots()
             
-            # Referenz auf die TableView
             day_schedule = self.calendar_container.day_schedule
             day_schedule.clear_schedule()
             
@@ -64,29 +63,47 @@ class ListManager:
                     "Keine Stunden für diesen Tag", "---"
                 )
                 return
+
+            # Erstelle ein Dictionary für schnellen Zugriff auf die Slots
+            slot_dict = {}
+            for i, (start, end, number) in enumerate(time_slots):
+                slot_dict[start.toString("HH:mm")] = (start, end, i)  # i statt number!
                 
             for lesson in lessons:
-                # Zeitberechnung
-                start_time = QTime.fromString(lesson['time'], "HH:mm")
-                end_time = start_time.addSecs(45 * 60)
+                start_time_str = lesson['time']
+                if start_time_str not in slot_dict:
+                    print(f"Warnung: Keine Slot-Konfiguration für Zeit {start_time_str}")
+                    continue
+                    
+                start_time, base_end_time, slot_index = slot_dict[start_time_str]
+                duration = lesson.get('duration', 1)
+                
+                # Bei Doppelstunden: Ende der zweiten Stunde verwenden
+                target_slot = slot_index + duration - 1
+                if duration > 1 and target_slot < len(time_slots):
+                    _, end_time, _ = time_slots[target_slot]
+                else:
+                    end_time = base_end_time
+                    
                 time_slot = f"{start_time.toString('HH:mm')} - {end_time.toString('HH:mm')}"
                 
-                # Status bestimmen
-                status = "kommend"
+                # Prüfe ob die Stunde vergangen ist
+                is_past = False
                 if date < QDate.currentDate():
-                    status = "vergangen"
-                elif is_today:
-                    if current_time > end_time:
-                        # Vergangene Stunde
-                        if not lesson.get('topic'):
-                            status = "kein Thema"
-                        else:
-                            # Überspringen wenn vergangen und Thema gesetzt
-                            continue
-                    elif current_time >= start_time:
-                        status = "aktuell"
+                    is_past = True
+                elif is_today and current_time > end_time:
+                    is_past = True
+                    
+                # Statusbestimmung
+                if is_past:
+                    if lesson.get('topic'):
+                        continue
+                    status = "kein Thema"
+                elif is_today and current_time >= start_time:
+                    status = "aktuell"
+                else:
+                    status = "kommend"
                 
-                # Stunde zur Tabelle hinzufügen
                 course_name = lesson.get('course_name', '')
                 subject = lesson.get('subject', '')
                 topic = lesson.get('topic', '')
@@ -100,7 +117,6 @@ class ListManager:
                     lesson['id']
                 )
             
-            # Sortiere nach Zeit
             day_schedule.model.sort(0)
             
         except Exception as e:
@@ -267,3 +283,26 @@ class ListManager:
                 
         except Exception as e:
             QMessageBox.critical(self.parent, "Fehler", f"Fehler beim Löschen: {str(e)}")
+
+    def get_time_slots(self):
+        """Berechnet die Zeitslots für den Tag basierend auf den Einstellungen."""
+        settings = self.parent.db.get_time_settings()
+        if not settings:
+            # Standard-Einstellungen wenn nichts konfiguriert
+            return [(QTime(8, 0), QTime(8, 45), 1)]
+            
+        slots = []
+        current_time = QTime.fromString(settings['first_lesson_start'], "HH:mm")
+        lesson_duration = settings['lesson_duration']
+        breaks = dict(settings['breaks'])
+        
+        for lesson in range(1, 11):  # 10 mögliche Stunden
+            start_time = current_time
+            end_time = current_time.addSecs(lesson_duration * 60)
+            slots.append((start_time, end_time, lesson))
+            
+            # Addiere Pause wenn vorhanden
+            break_duration = breaks.get(lesson, 0)
+            current_time = end_time.addSecs(break_duration * 60)
+            
+        return slots

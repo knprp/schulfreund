@@ -806,16 +806,35 @@ class DatabaseManager:
         except Exception as e:
             raise Exception(f"Fehler beim Löschen der Stunde(n): {str(e)}")
 
-    def test_color_query(self, date: str):
-        """Test-Methode um die Farbabruf zu debuggen"""
-        cursor = self.execute(
-            """
-            SELECT l.id as lesson_id, c.color
-            FROM lessons l
-            JOIN courses c ON l.course_id = c.id
-            WHERE l.date = ?
-            """,
-            (date,)
-        )
-        for row in cursor.fetchall():
-            print(f"TEST COLOR QUERY - Lesson {row['lesson_id']}: {row['color']}")
+    def get_time_settings(self) -> dict:
+        """Holt die Zeiteinstellungen aus der Datenbank.
+        
+        Returns:
+            dict: Dictionary mit first_lesson_start, lesson_duration und breaks
+                oder None wenn keine Einstellungen gefunden
+        """
+        try:
+            # Hole Grundeinstellungen
+            cursor = self.execute(
+                "SELECT first_lesson_start, lesson_duration FROM timetable_settings WHERE id = 1"
+            )
+            settings = cursor.fetchone()
+            
+            if not settings:
+                return None
+                
+            # Hole Pausen
+            cursor = self.execute(
+                "SELECT after_lesson, duration FROM breaks ORDER BY after_lesson"
+            )
+            breaks = cursor.fetchall()
+            
+            return {
+                'first_lesson_start': settings['first_lesson_start'],
+                'lesson_duration': settings['lesson_duration'],
+                'breaks': [(b['after_lesson'], b['duration']) for b in breaks]
+            }
+            
+        except Exception as e:
+            print(f"Fehler beim Laden der Zeiteinstellungen: {str(e)}")
+            return None
