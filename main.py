@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt6.QtCore import Qt, QTime, QDate
 from PyQt6.QtGui import QIcon
 from PyQt6 import uic
+from pathlib import Path
 
 from src.database.db_manager import DatabaseManager
 from src.views.list_manager import ListManager
@@ -39,6 +40,17 @@ class SchoolManagement(QMainWindow):
         
         # ListManager für Kalenderansichten initialisieren
         self.list_manager = ListManager(self)
+
+        # Icon setzen - mehrere Versuche
+        icon_path = Path('assets/icon.png')
+        if icon_path.exists():
+            icon = QIcon(str(icon_path))
+            self.setWindowIcon(icon)
+            # Explizit für Linux/X11/Wayland
+            self.setAttribute(Qt.WidgetAttribute.WA_SetWindowIcon, True)
+            QApplication.setWindowIcon(icon)  # Global für die ganze Anwendung
+        else:
+            print(f"Warning: Icon file not found at {icon_path}")
     
     def setup_calendar_container(self):
         """Ersetzt den alten Kalender mit dem neuen CalendarContainer"""
