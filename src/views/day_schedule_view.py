@@ -15,13 +15,19 @@ class DayScheduleView(QTableView):
         ])
         self.setModel(self.model)
         
-        # Spaltenbreiten einstellen
+        # Spaltenbreiten optimieren
         header = self.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Zeit
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Kurs
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Fach
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)          # Thema
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Status
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Zeit
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Kurs
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Fach
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Thema
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Status
+        
+        # Feste Breiten setzen
+        self.setColumnWidth(0, 120)  # Zeit
+        self.setColumnWidth(1, 150)  # Kurs
+        self.setColumnWidth(2, 100)  # Fach
+        self.setColumnWidth(4, 80)   # Status
         
         # Weitere Einstellungen
         self.setAlternatingRowColors(True)
@@ -68,7 +74,7 @@ class DayScheduleView(QTableView):
         self.setSpan(row, 0, 1, self.model.columnCount())
 
     def add_lesson(self, time_slot: str, course: str, subject: str, topic: str, 
-                status: str, lesson_id: int = None, course_color: str = None):
+                status: str, lesson_id: int = None, course_color: str = None, homework: str = None):
         """Fügt eine neue Stunde zur Tabelle hinzu"""
         row = []
         
@@ -85,13 +91,9 @@ class DayScheduleView(QTableView):
         
         if course_color:
             color = QColor(course_color)
-            # Berechne Helligkeit (0-255)
             brightness = (color.red() * 299 + color.green() * 587 + color.blue() * 114) / 1000
-            
-            # Wenn Farbe zu dunkel (Helligkeit < 128), setze Text auf weiß
             text_color = QColor('white') if brightness < 128 else QColor('black')
             
-            # Setze Hintergrund- und Textfarbe für Kurs und Fach
             for item in [course_item, subject_item]:
                 item.setBackground(color)
                 item.setForeground(text_color)
@@ -104,17 +106,40 @@ class DayScheduleView(QTableView):
         status_item = QStandardItem(status)
         status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         if status == "aktuell":
-            status_item.setBackground(QColor("#e3f2fd"))  # Helles Blau
+            status_item.setBackground(QColor("#e3f2fd"))
         elif status == "kein Thema":
-            status_item.setBackground(QColor("#ffebee"))  # Helles Rot
+            status_item.setBackground(QColor("#ffebee"))
         elif status == "kommend":
-            status_item.setBackground(QColor("#f1f8e9"))  # Helles Grün
+            status_item.setBackground(QColor("#f1f8e9"))
         elif status == "nächste":
-            status_item.setBackground(QColor("#fff3e0"))  # Helles Orange
+            status_item.setBackground(QColor("#fff3e0"))
         row.append(status_item)
         
-        # Zeile zur Tabelle hinzufügen
+        # Hauptzeile zur Tabelle hinzufügen
+        main_row = self.model.rowCount()
         self.model.appendRow(row)
+        
+        # Wenn Hausaufgaben vorhanden, füge Unterzeile hinzu
+        if homework and homework.strip():
+            hw_row = []
+            # Eingerücktes Icon oder Text für Hausaufgaben
+            indent_item = QStandardItem("  📚")  # Eingerückt mit Emoji
+            hw_row.append(indent_item)
+            
+            # Hausaufgaben über Kurs und Fach-Spalte
+            hw_item = QStandardItem(homework)
+            hw_item.setBackground(QColor("#f5f5f5"))  # Leicht grauer Hintergrund
+            hw_row.append(hw_item)
+            
+            # Leere Items für die restlichen Spalten
+            hw_row.extend([QStandardItem(""), QStandardItem(""), QStandardItem("")])
+            
+            self.model.appendRow(hw_row)
+            # Verbinde die Kurs- und Fach-Spalte für die Hausaufgabenzeile
+            self.setSpan(self.model.rowCount()-1, 1, 1, 2)
+            
+            # Zeile zur Tabelle hinzufügen
+            self.model.appendRow(row)
 
     def get_lesson_id_at_position(self, pos):
         """Gibt die lesson_id an der Position zurück oder None"""
