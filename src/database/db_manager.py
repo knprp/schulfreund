@@ -879,4 +879,34 @@ class DatabaseManager:
             return None
 
 
+    def get_previous_lesson_homework(self, course_id: int, date: str, time: str) -> Optional[str]:
+        """Holt die Hausaufgaben der vorherigen Stunde eines Kurses.
+        
+        Args:
+            course_id: ID des Kurses
+            date: Datum der aktuellen Stunde
+            time: Uhrzeit der aktuellen Stunde
+            
+        Returns:
+            Hausaufgaben der vorherigen Stunde oder None
+        """
+        try:
+            query = """
+                SELECT homework
+                FROM lessons
+                WHERE course_id = ? 
+                AND (date < ? OR (date = ? AND time < ?))
+                AND homework IS NOT NULL
+                ORDER BY date DESC, time DESC
+                LIMIT 1
+            """
+            cursor = self.execute(query, (course_id, date, date, time))
+            result = cursor.fetchone()
+            return result['homework'] if result else None
+                
+        except Exception as e:
+            print(f"Fehler beim Laden der vorherigen Hausaufgaben: {str(e)}")
+            return None
+
+
     
