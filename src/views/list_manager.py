@@ -105,13 +105,20 @@ class ListManager:
                                 "kein Thema",
                                 lesson['id'],
                                 lesson.get('course_color'),
-                                lesson.get('homework')  # Hausaufgaben hinzugefügt
+                                None  # Keine Hausaufgaben bei vergangenen Stunden
                             )
                     else:
                         if is_today and current_time >= start_time and current_time <= end_time:
                             status = "aktuell"
+                            homework = None  # Keine Hausaufgaben bei aktueller Stunde
                         else:
                             status = "kommend"
+                            # Hole Hausaufgaben der vorherigen Stunde
+                            homework = self.parent.db.get_previous_lesson_homework(
+                                lesson['course_id'],
+                                lesson['date'],
+                                lesson['time']
+                            )
                             
                         day_schedule.add_lesson(
                             time_slot,
@@ -121,7 +128,7 @@ class ListManager:
                             status,
                             lesson['id'],
                             lesson.get('course_color'),
-                            lesson.get('homework')  # Hausaufgaben hinzugefügt
+                            homework
                         )
             
             # Hole und zeige die nächsten Stunden pro Kurs
@@ -134,6 +141,13 @@ class ListManager:
                     lesson_date = QDate.fromString(lesson['date'], "yyyy-MM-dd")
                     date_str = lesson_date.toString("dd.MM.")
                     
+                    # Hole Hausaufgaben der vorherigen Stunde für diesen Kurs
+                    homework = self.parent.db.get_previous_lesson_homework(
+                        lesson['course_id'],
+                        lesson['date'],
+                        lesson['time']
+                    )
+                    
                     day_schedule.add_lesson(
                         f"{date_str} {lesson['time']}",
                         lesson['course_name'],
@@ -142,7 +156,7 @@ class ListManager:
                         "nächste",
                         lesson['id'],
                         lesson.get('course_color'),
-                        lesson.get('homework')  # Hausaufgaben hinzugefügt
+                        homework
                     )
                     
         except Exception as e:

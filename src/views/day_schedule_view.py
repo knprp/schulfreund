@@ -3,9 +3,12 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QStandardItemModel, QStandardItem, QColor
 
 class DayScheduleView(QTableView):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, calendar_container):
+        super().__init__()
+        self.calendar_container = calendar_container
+        self.main_window = calendar_container.parent
         self.setup_ui()
+        self.doubleClicked.connect(self.on_double_click)
         
     def setup_ui(self):
         # Spaltenüberschriften festlegen
@@ -123,7 +126,8 @@ class DayScheduleView(QTableView):
         if homework and homework.strip():
             hw_row = []
             # Eingerücktes Icon oder Text für Hausaufgaben
-            indent_item = QStandardItem("  📚")  # Eingerückt mit Emoji
+            indent_item = QStandardItem("📚  ")  # Emoji mit Leerzeichen
+            indent_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             hw_row.append(indent_item)
             
             # Hausaufgaben über Kurs und Fach-Spalte
@@ -138,8 +142,6 @@ class DayScheduleView(QTableView):
             # Verbinde die Kurs- und Fach-Spalte für die Hausaufgabenzeile
             self.setSpan(self.model.rowCount()-1, 1, 1, 2)
             
-            # Zeile zur Tabelle hinzufügen
-            self.model.appendRow(row)
 
     def get_lesson_id_at_position(self, pos):
         """Gibt die lesson_id an der Position zurück oder None"""
@@ -150,3 +152,19 @@ class DayScheduleView(QTableView):
             if time_item:
                 return time_item.data(Qt.ItemDataRole.UserRole)
         return None
+
+
+    def on_double_click(self, index):
+        """Handler für Doppelklick auf eine Stunde"""
+        # Hole die lesson_id aus der ersten Spalte der Zeile
+        time_item = self.model.item(index.row(), 0)
+        if time_item:
+            lesson_id = time_item.data(Qt.ItemDataRole.UserRole)
+            if lesson_id is not None:
+                self.show_lesson_details(lesson_id)
+
+    def show_lesson_details(self, lesson_id):
+        """Öffnet den Dialog mit den Stundendetails"""
+        from src.views.dialogs.lesson_details_dialog import LessonDetailsDialog
+        dialog = LessonDetailsDialog(self.main_window, lesson_id)
+        dialog.exec()
