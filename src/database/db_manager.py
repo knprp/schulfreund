@@ -44,23 +44,6 @@ class DatabaseManager:
                 )
         ''')
             
-            
-            # Noten Tabelle mit Foreign Keys
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS grades (
-                    id INTEGER PRIMARY KEY,
-                    student_id INTEGER NOT NULL,
-                    lesson_id INTEGER NOT NULL,
-                    competency_id INTEGER NOT NULL,
-                    grade INTEGER NOT NULL,
-                    comment TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
-                    FOREIGN KEY (lesson_id) REFERENCES lessons (id) ON DELETE CASCADE,
-                    FOREIGN KEY (competency_id) REFERENCES competencies (id) ON DELETE CASCADE
-                )
-            ''')
-            
             # Einstellungen Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS settings (
@@ -152,6 +135,7 @@ class DatabaseManager:
                     time TEXT NOT NULL,
                     subject TEXT NOT NULL,
                     topic TEXT NOT NULL,
+                    homework TEXT,    
                     recurring_hash TEXT,
                     lesson_number INTEGER,
                     duration INTEGER,
@@ -159,6 +143,12 @@ class DatabaseManager:
                     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
                 )
             ''')
+
+            try:
+                cursor.execute("ALTER TABLE lessons ADD COLUMN homework TEXT")
+            except sqlite3.Error:
+                # Ignoriere Fehler wenn Spalte bereits existiert
+                pass
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS timetable_settings (
@@ -887,3 +877,6 @@ class DatabaseManager:
         except Exception as e:
             print(f"Fehler beim Laden der Zeiteinstellungen: {str(e)}")
             return None
+
+
+    

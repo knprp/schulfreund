@@ -60,7 +60,8 @@ class ListManager:
             if not lessons:
                 day_schedule.add_lesson(
                     "---", "---", "---",
-                    "Heute keine Stunden", "---"
+                    "Heute keine Stunden", "---",
+                    None, None, None  # lesson_id, course_color, homework
                 )
             else:
                 # Zeige heutige Stunden
@@ -103,7 +104,8 @@ class ListManager:
                                 "Kein Thema eingetragen",
                                 "kein Thema",
                                 lesson['id'],
-                                lesson.get('course_color')
+                                lesson.get('course_color'),
+                                lesson.get('homework')  # Hausaufgaben hinzugefügt
                             )
                     else:
                         if is_today and current_time >= start_time and current_time <= end_time:
@@ -118,7 +120,8 @@ class ListManager:
                             lesson.get('topic', ''),
                             status,
                             lesson['id'],
-                            lesson.get('course_color')
+                            lesson.get('course_color'),
+                            lesson.get('homework')  # Hausaufgaben hinzugefügt
                         )
             
             # Hole und zeige die nächsten Stunden pro Kurs
@@ -138,7 +141,8 @@ class ListManager:
                         lesson.get('topic', ''),
                         "nächste",
                         lesson['id'],
-                        lesson.get('course_color')
+                        lesson.get('course_color'),
+                        lesson.get('homework')  # Hausaufgaben hinzugefügt
                     )
                     
         except Exception as e:
