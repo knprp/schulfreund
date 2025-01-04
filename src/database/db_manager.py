@@ -169,9 +169,24 @@ class DatabaseManager:
                 )
             ''')
 
+            # Bemerkungen Tabelle
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS student_remarks (
+                    id INTEGER PRIMARY KEY,
+                    student_id INTEGER NOT NULL,
+                    lesson_id INTEGER,  -- Optional
+                    remark_text TEXT NOT NULL,
+                    type TEXT DEFAULT 'general',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE SET NULL
+                )
+            ''')
+
             self.conn.commit()               
         except sqlite3.Error as e:
             raise Exception(f"Fehler beim Erstellen der Tabellen: {e}")
+
 
                                       
 
@@ -179,7 +194,11 @@ class DatabaseManager:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_lesson ON grades(lesson_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_competency ON grades(competency_id)')
-  
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_remarks_student 
+            ON student_remarks(student_id)
+        ''')
+        
 
     # Student-bezogene Methoden
     def add_student(self, name: str) -> int:

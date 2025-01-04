@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional
+from .remarks import StudentRemark
 
 class Student:
     def __init__(self, id: Optional[int] = None, name: str = "", created_at: Optional[str] = None):
@@ -93,6 +94,39 @@ class Student:
             WHERE g.student_id = ?
             GROUP BY l.subject
         ''', (self.id,))
+
+    def add_remark(self, db, text: str, type: str = "general", 
+                lesson_id: Optional[int] = None) -> StudentRemark:
+        """Fügt eine neue Bemerkung für den Schüler hinzu."""
+        if not self.id:
+            raise ValueError("Schüler hat keine ID")
+        return StudentRemark.create(db, self.id, text, type, lesson_id)
+
+    def get_remarks(self, db, type: Optional[str] = None) -> List[StudentRemark]:
+        """Holt alle Bemerkungen des Schülers, optional gefiltert nach Typ."""
+        if not self.id:
+            raise ValueError("Schüler hat keine ID")
+        return StudentRemark.get_for_student(db, self.id, type)
+
+    def get_latest_remarks(self, db, limit: int = 5) -> List[StudentRemark]:
+        """Holt die neuesten Bemerkungen des Schülers."""
+        if not self.id:
+            raise ValueError("Schüler hat keine ID")
+            
+        cursor = db.execute(
+            """SELECT * FROM student_remarks 
+            WHERE student_id = ? 
+            ORDER BY created_at DESC LIMIT ?""",
+            (self.id, limit)
+        )
+        return [StudentRemark(
+            id=row['id'],
+            student_id=row['student_id'],
+            lesson_id=row['lesson_id'],
+            remark_text=row['remark_text'],
+            type=row['type'],
+            created_at=row['created_at']
+        ) for row in cursor.fetchall()]
         
         return {row['subject']: dict(row) for row in cursor.fetchall()}
 
@@ -101,3 +135,4 @@ class Student:
 
     def __repr__(self) -> str:
         return f"Student(id={self.id}, name='{self.name}')"
+
