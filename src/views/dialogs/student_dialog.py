@@ -15,6 +15,14 @@ class StudentDialog(QDialog):
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
+        # Kurs/Klasse Auswahl ganz nach oben
+        course_layout = QVBoxLayout()
+        course_layout.addWidget(QLabel("Kurs/Klasse:"))
+        self.course = QComboBox()
+        self.refresh_courses()
+        course_layout.addWidget(self.course)
+        layout.addLayout(course_layout)
+
         # Vorname Eingabefeld
         first_name_layout = QVBoxLayout()
         first_name_layout.addWidget(QLabel("Vorname:"))
@@ -30,14 +38,6 @@ class StudentDialog(QDialog):
         self.last_name.setPlaceholderText("Nachname eingeben")
         last_name_layout.addWidget(self.last_name)
         layout.addLayout(last_name_layout)
-
-        # Kurs/Klasse Auswahl
-        course_layout = QVBoxLayout()
-        course_layout.addWidget(QLabel("Kurs/Klasse:"))
-        self.course = QComboBox()
-        self.refresh_courses()
-        course_layout.addWidget(self.course)
-        layout.addLayout(course_layout)
 
         # Button-Layout
         button_layout = QHBoxLayout()
@@ -106,9 +106,9 @@ class StudentDialog(QDialog):
         if self.student:
             self.first_name.setText(self.student.first_name)
             self.last_name.setText(self.student.last_name)
-            
+                
             # Aktuellen Kurs laden
-            current_course = self.student.get_current_course(self.parent.db)
+            current_course = self.student.get_current_course(self.db)  # self.db statt self.parent.db
             if current_course:
                 index = self.course.findData(current_course['id'])
                 if index >= 0:

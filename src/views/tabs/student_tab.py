@@ -28,10 +28,17 @@ class StudentTab(QWidget):
         
         # Tabelle für Schüler
         self.students_table = QTableWidget()
-        self.students_table.setColumnCount(2)  # Vorname und Nachname
-        self.students_table.setHorizontalHeaderLabels(['Nachname', 'Vorname'])
+        self.students_table.setColumnCount(2)  # Name und Kurs/Klasse
+        self.students_table.setHorizontalHeaderLabels(['Name', 'Kurs/Klasse'])
         self.students_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.students_table.verticalHeader().setVisible(False)
+        self.students_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.students_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+
+        # Spaltenbreiten anpassen
+        header = self.students_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Name-Spalte dehnt sich
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Kurs-Spalte passt sich an
         # Nur Zeilenauswahl erlauben
         self.students_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.students_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -101,8 +108,14 @@ class StudentTab(QWidget):
     def add_student(self):
         """Fügt einen neuen Schüler hinzu"""
         try:
+            dialog = None  # Dialog außerhalb der Schleife definieren
             while True:
-                dialog = StudentDialog(self, db=self.parent.db)
+                if dialog is None:
+                    dialog = StudentDialog(self, db=self.parent.db)
+                else:
+                    # Vorherigen Dialog wiederverwenden, nur Input leeren
+                    dialog.clear_input()
+                    
                 result = dialog.exec()
                 
                 if result == 0:  # Abbrechen wurde geklickt
@@ -133,9 +146,7 @@ class StudentTab(QWidget):
                 
                 if result == 1:  # OK wurde geklickt
                     break
-                
-                dialog.clear_input()  # Nur Namen löschen, Kurs beibehalten
-                    
+                                
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
@@ -155,19 +166,15 @@ class StudentTab(QWidget):
                 row = self.students_table.rowCount()
                 self.students_table.insertRow(row)
                 
-                # Nachname
-                last_name_item = QTableWidgetItem(student.last_name)
-                last_name_item.setData(Qt.ItemDataRole.UserRole, student.id)
-                self.students_table.setItem(row, 0, last_name_item)
-                
-                # Vorname
-                first_name_item = QTableWidgetItem(student.first_name)
-                self.students_table.setItem(row, 1, first_name_item)
+                # Name (Nachname, Vorname)
+                name_item = QTableWidgetItem(f"{student.last_name}, {student.first_name}")
+                name_item.setData(Qt.ItemDataRole.UserRole, student.id)
+                self.students_table.setItem(row, 0, name_item)
                 
                 # Kurs/Klasse
                 course = student.get_current_course(self.parent.db)
                 course_item = QTableWidgetItem(course['name'] if course else "-")
-                self.students_table.setItem(row, 2, course_item)
+                self.students_table.setItem(row, 1, course_item)
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Schüler: {str(e)}")
@@ -180,12 +187,33 @@ class StudentTab(QWidget):
                 dialog = StudentDialog(self, student=student, db=self.parent.db)
                 if dialog.exec():
                     data = dialog.get_data()
+                    
+                    # Namen aktualisieren
                     student.first_name = data['first_name']
                     student.last_name = data['last_name']
                     student.update(self.parent.db)
+                    
+                    # Kurs aktualisieren
+                    course_id = data['course_id']
+                    current_course = student.get_current_course(self.parent.db)
+                    
+                    if course_id != (current_course['id'] if current_course else None):
+                        # Kurs hat sich geändert
+                        if course_id:
+                            # Aktives Halbjahr finden
+                            semester_dates = self.parent.db.get_semester_dates()
+                            if semester_dates:
+                                cursor = self.parent.db.execute("""
+                                    SELECT id FROM semester_history 
+                                    WHERE start_date = ? AND end_date = ?
+                                """, (semester_dates['semester_start'], semester_dates['semester_end']))
+                                semester = cursor.fetchone()
+                                if semester:
+                                    student.add_course(self.parent.db, course_id, semester['id'])
+                    
                     self.refresh_students()
                     self.parent.statusBar().showMessage(
-                        f"Schüler wurde zu {student.get_full_name()} umbenannt", 3000)
+                        f"Schüler {student.get_full_name()} wurde aktualisiert", 3000)
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
