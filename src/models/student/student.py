@@ -132,6 +132,74 @@ class Student:
             created_at=row['created_at']
         ) for row in cursor.fetchall()]
 
+    def add_course(self, db, course_id: int, semester_id: int) -> None:
+        """Fügt eine Kurszuordnung für den Schüler hinzu."""
+        if not self.id:
+            raise ValueError("Schüler hat keine ID")
+                
+        db.execute(
+            """INSERT INTO student_courses (student_id, course_id, semester_id)
+            VALUES (?, ?, ?)""",
+            (self.id, course_id, semester_id)
+        )
+
+    def remove_course(self, db, course_id: int, semester_id: int) -> None:
+        """Entfernt eine Kurszuordnung."""
+        if not self.id:
+            raise ValueError("Schüler hat keine ID")
+                
+        db.execute(
+            """DELETE FROM student_courses 
+            WHERE student_id = ? AND course_id = ? AND semester_id = ?""",
+            (self.id, course_id, semester_id)
+        )
+
+    def get_courses(self, db, semester_id: Optional[int] = None) -> list:
+        """Holt alle Kurszuordnungen des Schülers, optional gefiltert nach Semester."""
+        if not self.id:
+            raise ValueError("Schüler hat keine ID")
+                
+        query = """
+            SELECT c.*, sc.semester_id, sh.name as semester_name
+            FROM student_courses sc
+            JOIN courses c ON sc.course_id = c.id
+            JOIN semester_history sh ON sc.semester_id = sh.id
+            WHERE sc.student_id = ?
+        """
+        params = [self.id]
+        
+        if semester_id is not None:
+            query += " AND sc.semester_id = ?"
+            params.append(semester_id)
+                
+        query += " ORDER BY sh.start_date DESC, c.name"
+                
+        cursor = db.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_current_course(self, db) -> Optional[dict]:
+        """Holt den aktuellen Kurs des Schülers im aktiven Halbjahr."""
+        if not self.id:
+            raise ValueError("Schüler hat keine ID")
+        
+        # Aktives Halbjahr aus den Einstellungen holen
+        semester = db.get_semester_dates()
+        if not semester:
+            return None
+            
+        cursor = db.execute("""
+            SELECT c.id, c.name, c.type, sh.id as semester_id
+            FROM student_courses sc
+            JOIN courses c ON sc.course_id = c.id
+            JOIN semester_history sh ON sc.semester_id = sh.id
+            WHERE sc.student_id = ? 
+            AND sh.start_date = ? 
+            AND sh.end_date = ?
+            """, (self.id, semester['semester_start'], semester['semester_end']))
+        
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
     def get_full_name(self) -> str:
         """Gibt den vollständigen Namen im Format 'Vorname Nachname' zurück."""
         return f"{self.first_name} {self.last_name}"

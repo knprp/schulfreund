@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                            QTableWidget, QTableWidgetItem, QMessageBox, QMenu,
-                           QGroupBox, QHeaderView)
+                           QGroupBox, QHeaderView, QLabel, QComboBox)
 from PyQt6.QtCore import Qt
 from datetime import datetime
 from src.views.dialogs.student_dialog import StudentDialog
@@ -13,6 +13,7 @@ class StudentTab(QWidget):
         self.parent = parent
         self.current_student = None  # ID des aktuell ausgewählten Schülers
         self.setup_ui()
+        self.refresh_course_filter()  # Hier hinzufügen
         self.refresh_students()
 
         self.students_table.itemSelectionChanged.connect(self.on_student_selected)
@@ -39,6 +40,20 @@ class StudentTab(QWidget):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         left_column.addWidget(self.students_table)
+
+        # Filter-Layout über der Tabelle
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Kurs/Klasse:"))
+        self.course_filter = QComboBox()
+        self.course_filter.currentIndexChanged.connect(self.apply_filter)
+        filter_layout.addWidget(self.course_filter)
+        
+        clear_filter = QPushButton("Filter zurücksetzen")
+        clear_filter.clicked.connect(self.clear_filter)
+        filter_layout.addWidget(clear_filter)
+        filter_layout.addStretch()
+        
+        left_column.insertLayout(0, filter_layout)  # Filter über der Tabelle einfügen
         
         # Button zum Hinzufügen
         btn_layout = QHBoxLayout()
@@ -78,26 +93,49 @@ class StudentTab(QWidget):
         main_layout.addLayout(left_column)
         main_layout.addLayout(right_column)
 
+    def showEvent(self, event):
+        """Wird aufgerufen, wenn der Tab angezeigt wird"""
+        super().showEvent(event)
+        self.refresh_course_filter()
+
     def add_student(self):
         """Fügt einen neuen Schüler hinzu"""
         try:
             while True:
-                dialog = StudentDialog(self)
+                dialog = StudentDialog(self, db=self.parent.db)
                 result = dialog.exec()
                 
                 if result == 0:  # Abbrechen wurde geklickt
                     break
                     
                 data = dialog.get_data()
+                course_id = data.pop('course_id')  # Kurs-ID aus den Daten entfernen
+                
+                # Schüler erstellen
                 student = Student.create(self.parent.db, **data)
+                
+                # Wenn ein Kurs ausgewählt wurde, Zuordnung erstellen
+                if course_id:
+                    # Aktives Halbjahr finden
+                    semester_dates = self.parent.db.get_semester_dates()
+                    if semester_dates:
+                        cursor = self.parent.db.execute("""
+                            SELECT id FROM semester_history 
+                            WHERE start_date = ? AND end_date = ?
+                        """, (semester_dates['semester_start'], semester_dates['semester_end']))
+                        semester = cursor.fetchone()
+                        if semester:
+                            student.add_course(self.parent.db, course_id, semester['id'])
+                
                 self.refresh_students()
                 self.parent.statusBar().showMessage(
                     f"Schüler {student.get_full_name()} wurde hinzugefügt", 3000)
                 
                 if result == 1:  # OK wurde geklickt
                     break
-                # Bei result == 2 ("Speichern & Neu") geht die Schleife weiter
                 
+                dialog.clear_input()  # Nur Namen löschen, Kurs beibehalten
+                    
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
@@ -108,6 +146,12 @@ class StudentTab(QWidget):
             students = Student.get_all(self.parent.db)
             
             for student in students:
+                # Prüfe Filter
+                if self.course_filter.currentData():
+                    course = student.get_current_course(self.parent.db)
+                    if not course or course['id'] != self.course_filter.currentData():
+                        continue
+                
                 row = self.students_table.rowCount()
                 self.students_table.insertRow(row)
                 
@@ -120,6 +164,11 @@ class StudentTab(QWidget):
                 first_name_item = QTableWidgetItem(student.first_name)
                 self.students_table.setItem(row, 1, first_name_item)
                 
+                # Kurs/Klasse
+                course = student.get_current_course(self.parent.db)
+                course_item = QTableWidgetItem(course['name'] if course else "-")
+                self.students_table.setItem(row, 2, course_item)
+                
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Schüler: {str(e)}")
 
@@ -128,7 +177,7 @@ class StudentTab(QWidget):
         try:
             student = Student.get_by_id(self.parent.db, student_id)
             if student:
-                dialog = StudentDialog(self, student)
+                dialog = StudentDialog(self, student=student, db=self.parent.db)
                 if dialog.exec():
                     data = dialog.get_data()
                     student.first_name = data['first_name']
@@ -350,3 +399,31 @@ class StudentTab(QWidget):
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Löschen der Bemerkung: {str(e)}")
+
+    def refresh_course_filter(self):
+        """Aktualisiert die Kurs-Filter-Auswahl"""
+        current_course = self.course_filter.currentData()
+        self.course_filter.clear()
+        self.course_filter.addItem("Alle", None)
+        
+        try:
+            courses = self.parent.db.get_all_courses()
+            for course in courses:
+                self.course_filter.addItem(course['name'], course['id'])
+            
+            # Vorherige Auswahl wiederherstellen
+            if current_course:
+                index = self.course_filter.findData(current_course)
+                if index >= 0:
+                    self.course_filter.setCurrentIndex(index)
+                    
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Kurse: {str(e)}")
+
+    def apply_filter(self):
+        """Wendet den Kurs-Filter an"""
+        self.refresh_students()
+
+    def clear_filter(self):
+        """Setzt den Filter zurück"""
+        self.course_filter.setCurrentIndex(0)  # "Alle" auswählen
