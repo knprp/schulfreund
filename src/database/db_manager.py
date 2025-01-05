@@ -28,11 +28,11 @@ class DatabaseManager:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS students (
                     id INTEGER PRIMARY KEY,
-                    name TEXT NOT NULL,
+                    first_name TEXT NOT NULL,
+                    last_name TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-        ''')
-            
+            ''')
             # Kompetenzen Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS competencies (

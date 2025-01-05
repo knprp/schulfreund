@@ -5,54 +5,57 @@ from typing import List, Optional
 from .remarks import StudentRemark
 
 class Student:
-    def __init__(self, id: Optional[int] = None, name: str = "", created_at: Optional[str] = None):
+    def __init__(self, id: Optional[int] = None, first_name: str = "", 
+                 last_name: str = "", created_at: Optional[str] = None):
         self.id = id
-        self.name = name
+        self.first_name = first_name
+        self.last_name = last_name
         self.created_at = created_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     @staticmethod
-    def create(db, name: str) -> 'Student':
+    def create(db, first_name: str, last_name: str) -> 'Student':
         """Erstellt einen neuen Schüler in der Datenbank."""
-        if not name or not name.strip():
-            raise ValueError("Der Name darf nicht leer sein")
+        if not first_name.strip() or not last_name.strip():
+            raise ValueError("Vor- und Nachname dürfen nicht leer sein")
             
         cursor = db.execute(
-            "INSERT INTO students (name, created_at) VALUES (?, ?)",
-            (name.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            "INSERT INTO students (first_name, last_name, created_at) VALUES (?, ?, ?)",
+            (first_name.strip(), last_name.strip(), 
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         )
-        return Student(cursor.lastrowid, name)
+        return Student(cursor.lastrowid, first_name, last_name)
 
     @staticmethod
     def get_by_id(db, student_id: int) -> Optional['Student']:
         """Lädt einen Schüler anhand seiner ID."""
         cursor = db.execute(
-            "SELECT id, name, created_at FROM students WHERE id = ?",
+            "SELECT id, first_name, last_name, created_at FROM students WHERE id = ?",
             (student_id,)
         )
         row = cursor.fetchone()
         if row:
-            return Student(row['id'], row['name'], row['created_at'])
+            return Student(row['id'], row['first_name'], row['last_name'], row['created_at'])
         return None
 
     @staticmethod
     def get_all(db) -> List['Student']:
-        """Lädt alle Schüler aus der Datenbank."""
+        """Lädt alle Schüler aus der Datenbank, sortiert nach Nachname."""
         cursor = db.execute(
-            "SELECT id, name, created_at FROM students ORDER BY name"
+            "SELECT id, first_name, last_name, created_at FROM students ORDER BY last_name, first_name"
         )
-        return [Student(row['id'], row['name'], row['created_at']) 
+        return [Student(row['id'], row['first_name'], row['last_name'], row['created_at']) 
                 for row in cursor.fetchall()]
 
     def update(self, db) -> None:
         """Aktualisiert die Schülerdaten in der Datenbank."""
         if not self.id:
             raise ValueError("Schüler hat keine ID")
-        if not self.name or not self.name.strip():
-            raise ValueError("Der Name darf nicht leer sein")
+        if not self.first_name.strip() or not self.last_name.strip():
+            raise ValueError("Vor- und Nachname dürfen nicht leer sein")
             
         db.execute(
-            "UPDATE students SET name = ? WHERE id = ?",
-            (self.name.strip(), self.id)
+            "UPDATE students SET first_name = ?, last_name = ? WHERE id = ?",
+            (self.first_name.strip(), self.last_name.strip(), self.id)
         )
 
     def delete(self, db) -> None:
@@ -94,6 +97,7 @@ class Student:
             WHERE g.student_id = ?
             GROUP BY l.subject
         ''', (self.id,))
+        return {row['subject']: dict(row) for row in cursor.fetchall()}
 
     def add_remark(self, db, text: str, type: str = "general", 
                 lesson_id: Optional[int] = None) -> StudentRemark:
@@ -127,12 +131,13 @@ class Student:
             type=row['type'],
             created_at=row['created_at']
         ) for row in cursor.fetchall()]
-        
-        return {row['subject']: dict(row) for row in cursor.fetchall()}
+
+    def get_full_name(self) -> str:
+        """Gibt den vollständigen Namen im Format 'Vorname Nachname' zurück."""
+        return f"{self.first_name} {self.last_name}"
 
     def __str__(self) -> str:
-        return f"{self.name}"
+        return self.get_full_name()
 
     def __repr__(self) -> str:
-        return f"Student(id={self.id}, name='{self.name}')"
-
+        return f"Student(id={self.id}, first_name='{self.first_name}', last_name='{self.last_name}')"
