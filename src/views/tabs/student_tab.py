@@ -27,11 +27,17 @@ class StudentTab(QWidget):
         
         # Tabelle für Schüler
         self.students_table = QTableWidget()
-        self.students_table.setColumnCount(1)
-        self.students_table.setHorizontalHeaderLabels(['Name'])
+        self.students_table.setColumnCount(2)  # Vorname und Nachname
+        self.students_table.setHorizontalHeaderLabels(['Nachname', 'Vorname'])
         self.students_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.students_table.verticalHeader().setVisible(False)
-        self.students_table.horizontalHeader().setStretchLastSection(True)
+        # Nur Zeilenauswahl erlauben
+        self.students_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.students_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        # Beide Spalten sollen sich strecken
+        header = self.students_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         left_column.addWidget(self.students_table)
         
         # Button zum Hinzufügen
@@ -75,15 +81,22 @@ class StudentTab(QWidget):
     def add_student(self):
         """Fügt einen neuen Schüler hinzu"""
         try:
-            dialog = StudentDialog(self)
-            if dialog.exec():
-                name = dialog.name.text().strip()
-                if not name:
-                    raise ValueError("Der Name darf nicht leer sein")
+            while True:
+                dialog = StudentDialog(self)
+                result = dialog.exec()
+                
+                if result == 0:  # Abbrechen wurde geklickt
+                    break
                     
-                student = Student.create(self.parent.db, name)
+                data = dialog.get_data()
+                student = Student.create(self.parent.db, **data)
                 self.refresh_students()
-                self.parent.statusBar().showMessage(f"Schüler {name} wurde hinzugefügt", 3000)
+                self.parent.statusBar().showMessage(
+                    f"Schüler {student.get_full_name()} wurde hinzugefügt", 3000)
+                
+                if result == 1:  # OK wurde geklickt
+                    break
+                # Bei result == 2 ("Speichern & Neu") geht die Schleife weiter
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
@@ -98,14 +111,53 @@ class StudentTab(QWidget):
                 row = self.students_table.rowCount()
                 self.students_table.insertRow(row)
                 
-                # Name anzeigen
-                name_item = QTableWidgetItem(student.name)
-                # ID als UserRole speichern
-                name_item.setData(Qt.ItemDataRole.UserRole, student.id)
-                self.students_table.setItem(row, 0, name_item)
+                # Nachname
+                last_name_item = QTableWidgetItem(student.last_name)
+                last_name_item.setData(Qt.ItemDataRole.UserRole, student.id)
+                self.students_table.setItem(row, 0, last_name_item)
+                
+                # Vorname
+                first_name_item = QTableWidgetItem(student.first_name)
+                self.students_table.setItem(row, 1, first_name_item)
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Schüler: {str(e)}")
+
+    def edit_student(self, student_id):
+        """Bearbeitet einen existierenden Schüler"""
+        try:
+            student = Student.get_by_id(self.parent.db, student_id)
+            if student:
+                dialog = StudentDialog(self, student)
+                if dialog.exec():
+                    data = dialog.get_data()
+                    student.first_name = data['first_name']
+                    student.last_name = data['last_name']
+                    student.update(self.parent.db)
+                    self.refresh_students()
+                    self.parent.statusBar().showMessage(
+                        f"Schüler wurde zu {student.get_full_name()} umbenannt", 3000)
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", str(e))
+
+    def delete_student(self, student_id):
+        """Löscht einen Schüler"""
+        try:
+            student = Student.get_by_id(self.parent.db, student_id)
+            if student:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Icon.Question)
+                msg.setText(f"Möchten Sie den Schüler '{student.get_full_name()}' wirklich löschen?")
+                msg.setStandardButtons(
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                
+                if msg.exec() == QMessageBox.StandardButton.Yes:
+                    student.delete(self.parent.db)
+                    self.refresh_students()
+                    self.parent.statusBar().showMessage(
+                        f"Schüler {student.get_full_name()} wurde gelöscht", 3000)
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", str(e))
 
     def show_context_menu(self, pos):
         """Zeigt das Kontextmenü für die Schülertabelle"""
@@ -129,45 +181,6 @@ class StudentTab(QWidget):
             self.edit_student(student_id)
         elif action == delete_action:
             self.delete_student(student_id)
-
-    def edit_student(self, student_id):
-        """Bearbeitet einen existierenden Schüler"""
-        try:
-            student = Student.get_by_id(self.parent.db, student_id)
-            if student:
-                dialog = StudentDialog(self)
-                dialog.name.setText(student.name)
-                if dialog.exec():
-                    new_name = dialog.name.text().strip()
-                    if new_name:
-                        student.name = new_name
-                        student.update(self.parent.db)
-                        self.refresh_students()
-                        self.parent.statusBar().showMessage(
-                            f"Schüler wurde zu {new_name} umbenannt", 3000)
-                    else:
-                        raise ValueError("Der Name darf nicht leer sein")
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler", str(e))
-
-    def delete_student(self, student_id):
-        """Löscht einen Schüler"""
-        try:
-            student = Student.get_by_id(self.parent.db, student_id)
-            if student:
-                msg = QMessageBox()
-                msg.setIcon(QMessageBox.Icon.Question)
-                msg.setText(f"Möchten Sie den Schüler '{student.name}' wirklich löschen?")
-                msg.setStandardButtons(
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                
-                if msg.exec() == QMessageBox.StandardButton.Yes:
-                    student.delete(self.parent.db)
-                    self.refresh_students()
-                    self.parent.statusBar().showMessage(
-                        f"Schüler {student.name} wurde gelöscht", 3000)
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler", str(e))
 
     def on_student_selected(self):
         """Handler für Schülerauswahl"""
