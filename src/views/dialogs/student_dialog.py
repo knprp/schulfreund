@@ -1,10 +1,11 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                           QLineEdit, QDialogButtonBox, QPushButton)
+                           QLineEdit, QDialogButtonBox, QPushButton, QComboBox)
 
 class StudentDialog(QDialog):
-    def __init__(self, parent=None, student=None):
+    def __init__(self, parent=None, student=None, db=None):
         super().__init__(parent)
         self.student = student
+        self.db = db  # Direkte Referenz auf die Datenbank
         self.setWindowTitle("Schüler bearbeiten" if student else "Schüler hinzufügen")
         self.setup_ui()
         
@@ -30,6 +31,14 @@ class StudentDialog(QDialog):
         last_name_layout.addWidget(self.last_name)
         layout.addLayout(last_name_layout)
 
+        # Kurs/Klasse Auswahl
+        course_layout = QVBoxLayout()
+        course_layout.addWidget(QLabel("Kurs/Klasse:"))
+        self.course = QComboBox()
+        self.refresh_courses()
+        course_layout.addWidget(self.course)
+        layout.addLayout(course_layout)
+
         # Button-Layout
         button_layout = QHBoxLayout()
 
@@ -48,6 +57,18 @@ class StudentDialog(QDialog):
         button_layout.addWidget(self.button_box)
         
         layout.addLayout(button_layout)
+
+    def refresh_courses(self):
+        """Lädt die verfügbaren Kurse in die Combobox"""
+        self.course.clear()
+        try:
+            courses = self.db.get_all_courses()  # Direkter Zugriff auf db
+            print("Geladene Kurse:", courses)
+            self.course.addItem("Kein Kurs", None)
+            for course in courses:
+                self.course.addItem(course['name'], course['id'])
+        except Exception as e:
+            print(f"Fehler beim Laden der Kurse: {e}")
 
     def validate_and_accept(self):
         """Prüft die Eingaben vor dem Akzeptieren"""
@@ -76,7 +97,8 @@ class StudentDialog(QDialog):
         """Gibt die eingegebenen Daten zurück"""
         return {
             'first_name': self.first_name.text().strip(),
-            'last_name': self.last_name.text().strip()
+            'last_name': self.last_name.text().strip(),
+            'course_id': self.course.currentData()
         }
 
     def load_student_data(self):
@@ -84,6 +106,13 @@ class StudentDialog(QDialog):
         if self.student:
             self.first_name.setText(self.student.first_name)
             self.last_name.setText(self.student.last_name)
+            
+            # Aktuellen Kurs laden
+            current_course = self.student.get_current_course(self.parent.db)
+            if current_course:
+                index = self.course.findData(current_course['id'])
+                if index >= 0:
+                    self.course.setCurrentIndex(index)
 
     def clear_input(self):
         """Leert alle Eingabefelder"""

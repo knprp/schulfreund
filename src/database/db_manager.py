@@ -105,12 +105,12 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS student_courses (
                     student_id INTEGER,
                     course_id INTEGER,
-                    start_date TEXT NOT NULL,  -- Format: YYYY-MM-DD
-                    end_date TEXT NOT NULL,    -- Format: YYYY-MM-DD
+                    semester_id INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (student_id, course_id, start_date),
+                    PRIMARY KEY (student_id, course_id, semester_id),
                     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+                    FOREIGN KEY (semester_id) REFERENCES semester_history(id) ON DELETE CASCADE
                 )
             ''')
             
