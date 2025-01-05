@@ -1,19 +1,29 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                           QTableWidget, QTableWidgetItem, QMessageBox)
+                           QTableWidget, QTableWidgetItem, QMessageBox, QMenu,
+                           QGroupBox, QHeaderView)
 from PyQt6.QtCore import Qt
+from datetime import datetime
 from src.views.dialogs.student_dialog import StudentDialog
 from src.models.student import Student
+from src.views.dialogs.remark_dialog import RemarkDialog
 
 class StudentTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
+        self.current_student = None  # ID des aktuell ausgewählten Schülers
         self.setup_ui()
         self.refresh_students()
 
+        self.students_table.itemSelectionChanged.connect(self.on_student_selected)
+
     def setup_ui(self):
         """Erstellt das UI des Schüler-Tabs"""
-        layout = QVBoxLayout(self)
+        # Hauptlayout als HBox für zwei Spalten
+        main_layout = QHBoxLayout(self)
+        
+        # Linke Spalte für Schülerliste
+        left_column = QVBoxLayout()
         
         # Tabelle für Schüler
         self.students_table = QTableWidget()
@@ -22,7 +32,7 @@ class StudentTab(QWidget):
         self.students_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.students_table.verticalHeader().setVisible(False)
         self.students_table.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(self.students_table)
+        left_column.addWidget(self.students_table)
         
         # Button zum Hinzufügen
         btn_layout = QHBoxLayout()
@@ -30,11 +40,37 @@ class StudentTab(QWidget):
         btn_add.clicked.connect(self.add_student)
         btn_layout.addWidget(btn_add)
         btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+        left_column.addLayout(btn_layout)
         
         # Kontextmenü einrichten
         self.students_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.students_table.customContextMenuRequested.connect(self.show_context_menu)
+        
+        # Rechte Spalte für Bemerkungen
+        right_column = QVBoxLayout()
+        
+        # GroupBox für Bemerkungen
+        remarks_group = QGroupBox("Bemerkungen")
+        remarks_layout = QVBoxLayout()
+        
+        # Tabelle für Bemerkungen
+        self.remarks_table = QTableWidget()
+        self.remarks_table.setColumnCount(3)
+        self.remarks_table.setHorizontalHeaderLabels(["Datum", "Typ", "Text"])
+        self.remarks_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        remarks_layout.addWidget(self.remarks_table)
+        
+        # Button für neue Bemerkung
+        btn_add_remark = QPushButton("Neue Bemerkung")
+        btn_add_remark.clicked.connect(self.add_remark)
+        remarks_layout.addWidget(btn_add_remark)
+        
+        remarks_group.setLayout(remarks_layout)
+        right_column.addWidget(remarks_group)
+        
+        # Spalten zum Hauptlayout hinzufügen
+        main_layout.addLayout(left_column)
+        main_layout.addLayout(right_column)
 
     def add_student(self):
         """Fügt einen neuen Schüler hinzu"""
@@ -53,22 +89,26 @@ class StudentTab(QWidget):
             QMessageBox.critical(self, "Fehler", str(e))
 
     def refresh_students(self):
-        """Aktualisiert die Schülertabelle"""
+        """Aktualisiert die Schülerliste"""
         try:
             self.students_table.setRowCount(0)
             students = Student.get_all(self.parent.db)
+            
             for student in students:
                 row = self.students_table.rowCount()
                 self.students_table.insertRow(row)
-                item = QTableWidgetItem(student.name)
-                item.setData(Qt.ItemDataRole.UserRole, student.id)
-                self.students_table.setItem(row, 0, item)
+                
+                # Name anzeigen
+                name_item = QTableWidgetItem(student.name)
+                # ID als UserRole speichern
+                name_item.setData(Qt.ItemDataRole.UserRole, student.id)
+                self.students_table.setItem(row, 0, name_item)
+                
         except Exception as e:
-            QMessageBox.critical(self, "Fehler", str(e))
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Schüler: {str(e)}")
 
     def show_context_menu(self, pos):
         """Zeigt das Kontextmenü für die Schülertabelle"""
-        from PyQt6.QtWidgets import QMenu
         
         item = self.students_table.itemAt(pos)
         if item is None:
@@ -128,3 +168,172 @@ class StudentTab(QWidget):
                         f"Schüler {student.name} wurde gelöscht", 3000)
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
+
+    def on_student_selected(self):
+        """Handler für Schülerauswahl"""
+        items = self.students_table.selectedItems()
+        if not items:
+            self.current_student = None
+            return
+            
+        item = items[0]
+        self.current_student = item.data(Qt.ItemDataRole.UserRole)  # ID aus UserRole holen
+        self.load_remarks(self.current_student)  # Lade Bemerkungen
+
+    def select_student(self, student_id):
+        """Wählt einen bestimmten Schüler aus."""
+        for row in range(self.students_table.rowCount()):
+            if int(self.students_table.item(row, 0).text()) == student_id:
+                self.students_table.selectRow(row)
+                break
+
+
+    def setup_remarks_ui(self):
+        """Richtet die UI-Komponenten für Bemerkungen ein."""
+        # Gruppierung für Bemerkungen
+        remarks_group = QGroupBox("Bemerkungen")
+        remarks_layout = QVBoxLayout()
+
+        # Liste für Bemerkungen
+        self.remarks_table = QTableWidget()
+        self.remarks_table.setColumnCount(3)
+        self.remarks_table.setHorizontalHeaderLabels(["Datum", "Typ", "Text"])
+        self.remarks_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        remarks_layout.addWidget(self.remarks_table)
+
+        # Button zum Hinzufügen
+        add_button = QPushButton("Neue Bemerkung")
+        add_button.clicked.connect(self.add_remark)
+        remarks_layout.addWidget(add_button)
+
+        remarks_group.setLayout(remarks_layout)
+        self.right_layout.addWidget(remarks_group)  # Füge zur rechten Spalte hinzu
+
+        # Kontextmenü für Bemerkungen
+        self.remarks_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.remarks_table.customContextMenuRequested.connect(self.show_remarks_context_menu)
+
+    def load_remarks(self, student_id: int):
+        """Lädt die Bemerkungen eines Schülers."""
+        try:
+            student = Student.get_by_id(self.parent.db, student_id)
+            if not student:
+                return
+                
+            remarks = student.get_remarks(self.parent.db)
+            self.remarks_table.setRowCount(len(remarks))
+            
+            for row, remark in enumerate(remarks):
+                # Datum
+                date_item = QTableWidgetItem(
+                    datetime.strptime(remark.created_at, "%Y-%m-%d %H:%M:%S")
+                    .strftime("%d.%m.%Y %H:%M")
+                )
+                self.remarks_table.setItem(row, 0, date_item)
+                
+                # Typ
+                type_mapping = {
+                    'general': 'Allgemein',
+                    'behavior': 'Verhalten',
+                    'achievement': 'Leistung',
+                    'attendance': 'Anwesenheit'
+                }
+                type_item = QTableWidgetItem(type_mapping.get(remark.type, 'Allgemein'))
+                self.remarks_table.setItem(row, 1, type_item)
+                
+                # Text
+                text_item = QTableWidgetItem(remark.remark_text)
+                self.remarks_table.setItem(row, 2, text_item)
+                
+                # Speichere remark.id für spätere Verwendung
+                date_item.setData(Qt.ItemDataRole.UserRole, remark.id)
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Bemerkungen: {str(e)}")
+
+    def add_remark(self):
+        """Fügt eine neue Bemerkung hinzu."""
+        if not self.current_student:
+            QMessageBox.warning(self, "Warnung", "Bitte wählen Sie zuerst einen Schüler aus.")
+            return
+            
+        try:
+            dialog = RemarkDialog(self)
+            if dialog.exec():
+                data = dialog.get_data()
+                student = Student.get_by_id(self.parent.db, self.current_student)
+                student.add_remark(
+                    self.parent.db,
+                    text=data['remark_text'],
+                    type=data['type']
+                )
+                self.load_remarks(self.current_student)
+                self.parent.statusBar().showMessage("Bemerkung wurde hinzugefügt", 3000)
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Hinzufügen der Bemerkung: {str(e)}")
+
+    def show_remarks_context_menu(self, pos):
+        """Zeigt das Kontextmenü für Bemerkungen."""
+        item = self.remarks_table.itemAt(pos)
+        if not item:
+            return
+            
+        menu = QMenu()
+        edit_action = menu.addAction("Bearbeiten")
+        delete_action = menu.addAction("Löschen")
+        
+        action = menu.exec(self.remarks_table.viewport().mapToGlobal(pos))
+        if not action:
+            return
+            
+        row = self.remarks_table.row(item)
+        remark_id = self.remarks_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        
+        if action == edit_action:
+            self.edit_remark(remark_id)
+        elif action == delete_action:
+            self.delete_remark(remark_id)
+
+    def edit_remark(self, remark_id: int):
+        """Bearbeitet eine existierende Bemerkung."""
+        try:
+            remark = StudentRemark.get_by_id(self.parent.db, remark_id)
+            if not remark:
+                return
+                
+            dialog = RemarkDialog(self, remark)
+            if dialog.exec():
+                data = dialog.get_data()
+                remark.remark_text = data['remark_text']
+                remark.type = data['type']
+                remark.update(self.parent.db)
+                
+                self.load_remarks(self.current_student)
+                self.parent.statusBar().showMessage("Bemerkung wurde aktualisiert", 3000)
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Bearbeiten der Bemerkung: {str(e)}")
+
+    def delete_remark(self, remark_id: int):
+        """Löscht eine Bemerkung."""
+        try:
+            remark = StudentRemark.get_by_id(self.parent.db, remark_id)
+            if not remark:
+                return
+                
+            reply = QMessageBox.question(
+                self,
+                'Bemerkung löschen',
+                'Möchten Sie diese Bemerkung wirklich löschen?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                remark.delete(self.parent.db)
+                self.load_remarks(self.current_student)
+                self.parent.statusBar().showMessage("Bemerkung wurde gelöscht", 3000)
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Löschen der Bemerkung: {str(e)}")
