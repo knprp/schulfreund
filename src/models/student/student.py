@@ -62,8 +62,18 @@ class Student:
         """Löscht den Schüler aus der Datenbank."""
         if not self.id:
             raise ValueError("Schüler hat keine ID")
-            
+        
+        print(f"DEBUG: Versuche Schüler mit ID {self.id} zu löschen")    
         db.execute("DELETE FROM students WHERE id = ?", (self.id,))
+        print(f"DEBUG: Schüler gelöscht. Prüfe ob noch in student_courses...")
+
+        # Debug: Prüfe ob noch Einträge existieren
+        cursor = db.execute(
+            "SELECT COUNT(*) as count FROM student_courses WHERE student_id = ?", 
+            (self.id,)
+        )
+        result = cursor.fetchone()
+        print(f"DEBUG: Anzahl Einträge in student_courses für ID {self.id}: {result['count']}")
 
     def get_grades(self, db) -> list:
         """Holt alle Noten des Schülers."""
