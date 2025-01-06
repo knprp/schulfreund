@@ -16,6 +16,13 @@ class DatabaseManager:
         try:
             self.conn = sqlite3.connect(self.db_file)
             self.conn.row_factory = sqlite3.Row
+            
+            # Foreign Keys aktivieren und Status prüfen
+            cursor = self.execute("PRAGMA foreign_keys = ON")
+            cursor = self.execute("PRAGMA foreign_keys")
+            fk_enabled = cursor.fetchone()[0]
+            print(f"DEBUG: Foreign Keys enabled: {bool(fk_enabled)}")
+            
         except sqlite3.Error as e:
             raise Exception(f"Datenbankverbindung fehlgeschlagen: {e}")
 
@@ -27,7 +34,7 @@ class DatabaseManager:
             # Studenten Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS students (
-                    id INTEGER PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -927,5 +934,71 @@ class DatabaseManager:
             print(f"Fehler beim Laden der vorherigen Hausaufgaben: {str(e)}")
             return None
 
+    def get_courses_by_semester(self, semester_id: int) -> list:
+        """Holt alle Kurse eines bestimmten Semesters."""
+        try:
+            # Debug: Zeige die rohen Verknüpfungen
+            debug_query = """
+            SELECT c.name as course_name, sc.student_id, sc.semester_id
+            FROM courses c
+            LEFT JOIN student_courses sc ON c.id = sc.course_id
+            ORDER BY c.name, sc.student_id;
+            """
+            cursor = self.execute(debug_query)
+            debug_results = [dict(row) for row in cursor.fetchall()]
+            print(f"DEBUG Raw data: {debug_results}")
 
-    
+            # Hauptabfrage wie gehabt
+            query = """
+            SELECT 
+                c.*,
+                COUNT(DISTINCT sc.student_id) as student_count
+            FROM courses c
+            LEFT JOIN student_courses sc ON c.id = sc.course_id AND sc.semester_id = ?
+            GROUP BY c.id
+            ORDER BY c.name
+            """
+            cursor = self.execute(query, (semester_id,))
+            results = [dict(row) for row in cursor.fetchall()]
+            print(f"DEBUG Courses with counts: {results}")
+            return results
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der Kurse: {str(e)}")
+
+
+    def get_students_by_course(self, course_id: int, semester_id: int) -> list:
+        """Holt alle Schüler eines Kurses in einem bestimmten Semester."""
+        try:
+            # Debug-Abfrage
+            debug_query = """
+            SELECT 
+                sc.student_id,
+                s.id as student_exists,
+                s.first_name,
+                s.last_name
+            FROM student_courses sc
+            LEFT JOIN students s ON s.id = sc.student_id
+            WHERE sc.course_id = ?
+            AND sc.semester_id = ?
+            ORDER BY sc.student_id
+            """
+            cursor = self.execute(debug_query, (course_id, semester_id))
+            debug_results = [dict(row) for row in cursor.fetchall()]
+            print(f"DEBUG Student details for course {course_id}: {debug_results}")
+
+            # Hauptabfrage wie gehabt
+            query = """
+            SELECT
+                s.id,
+                s.first_name,
+                s.last_name
+            FROM students s
+            JOIN student_courses sc ON s.id = sc.student_id
+            WHERE sc.course_id = ?
+            AND sc.semester_id = ?
+            ORDER BY s.last_name, s.first_name
+            """
+            cursor = self.execute(query, (course_id, semester_id))
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der Schüler: {str(e)}")
