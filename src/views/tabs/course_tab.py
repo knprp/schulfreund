@@ -78,10 +78,10 @@ class CourseTab(QWidget):
         try:
             dialog = CourseDialog(self)
             if dialog.exec():
-                data = dialog.get_data()
-                Course.create(self.parent.db, **data)
+                # Die Kurserstellung erfolgt jetzt im Dialog, 
+                # wir müssen nur noch die Liste aktualisieren
                 self.refresh_courses()
-                self.parent.statusBar().showMessage(f"Kurs {data['name']} wurde hinzugefügt", 3000)
+                self.parent.statusBar().showMessage("Kurs wurde hinzugefügt", 3000)
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
