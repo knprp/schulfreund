@@ -187,28 +187,28 @@ class Student:
         cursor = db.execute(query, tuple(params))
         return [dict(row) for row in cursor.fetchall()]
 
-    def get_current_course(self, db) -> Optional[dict]:
-        """Holt den aktuellen Kurs des Schülers im aktiven Halbjahr."""
+    def get_current_courses(self, db) -> list[dict]:
+        """Holt alle aktuellen Kurse des Schülers im aktiven Halbjahr."""
         if not self.id:
             raise ValueError("Schüler hat keine ID")
         
         # Aktives Halbjahr aus den Einstellungen holen
         semester = db.get_semester_dates()
         if not semester:
-            return None
+            return []
             
         cursor = db.execute("""
             SELECT c.id, c.name, c.type, sh.id as semester_id
-            FROM student_courses sc
+            FROM student_courses sc 
             JOIN courses c ON sc.course_id = c.id
             JOIN semester_history sh ON sc.semester_id = sh.id
             WHERE sc.student_id = ? 
             AND sh.start_date = ? 
             AND sh.end_date = ?
+            ORDER BY c.name
             """, (self.id, semester['semester_start'], semester['semester_end']))
         
-        row = cursor.fetchone()
-        return dict(row) if row else None
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_full_name(self) -> str:
         """Gibt den vollständigen Namen im Format 'Vorname Nachname' zurück."""

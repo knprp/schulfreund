@@ -122,13 +122,13 @@ class StudentTab(QWidget):
                     break
                     
                 data = dialog.get_data()
-                course_id = data.pop('course_id')  # Kurs-ID aus den Daten entfernen
+                new_course_ids = data.pop('course_ids')  # Hier den Schlüssel anpassen
                 
                 # Schüler erstellen
                 student = Student.create(self.parent.db, **data)
                 
-                # Wenn ein Kurs ausgewählt wurde, Zuordnung erstellen
-                if course_id:
+                # Wenn Kurse ausgewählt wurden, Zuordnungen erstellen
+                if new_course_ids:  # Hier die neue Variable verwenden
                     # Aktives Halbjahr finden
                     semester_dates = self.parent.db.get_semester_dates()
                     if semester_dates:
@@ -138,7 +138,8 @@ class StudentTab(QWidget):
                         """, (semester_dates['semester_start'], semester_dates['semester_end']))
                         semester = cursor.fetchone()
                         if semester:
-                            student.add_course(self.parent.db, course_id, semester['id'])
+                            for course_id in new_course_ids:  # Hier die neue Variable verwenden
+                                student.add_course(self.parent.db, course_id, semester['id'])
                 
                 self.refresh_students()
                 self.parent.statusBar().showMessage(
@@ -172,8 +173,9 @@ class StudentTab(QWidget):
                 self.students_table.setItem(row, 0, name_item)
                 
                 # Kurs/Klasse
-                course = student.get_current_course(self.parent.db)
-                course_item = QTableWidgetItem(course['name'] if course else "-")
+                courses = student.get_current_courses(self.parent.db)
+                course_names = [c['name'] for c in courses] if courses else ["-"]
+                course_item = QTableWidgetItem(", ".join(course_names))
                 self.students_table.setItem(row, 1, course_item)
                 
         except Exception as e:
@@ -193,30 +195,36 @@ class StudentTab(QWidget):
                     student.last_name = data['last_name']
                     student.update(self.parent.db)
                     
-                    # Kurs aktualisieren
-                    course_id = data['course_id']
-                    current_course = student.get_current_course(self.parent.db)
+                    # Kurse aktualisieren
+                    new_course_ids = data['course_ids']  # Hier holen wir es aus dem data dict
+                    current_courses = student.get_current_courses(self.parent.db)
+                    current_course_ids = [c['id'] for c in current_courses]
                     
-                    if course_id != (current_course['id'] if current_course else None):
-                        # Kurs hat sich geändert
-                        if course_id:
-                            # Aktives Halbjahr finden
-                            semester_dates = self.parent.db.get_semester_dates()
-                            if semester_dates:
-                                cursor = self.parent.db.execute("""
-                                    SELECT id FROM semester_history 
-                                    WHERE start_date = ? AND end_date = ?
-                                """, (semester_dates['semester_start'], semester_dates['semester_end']))
-                                semester = cursor.fetchone()
-                                if semester:
+                    # Aktives Halbjahr finden
+                    semester_dates = self.parent.db.get_semester_dates()
+                    if semester_dates:
+                        cursor = self.parent.db.execute("""
+                            SELECT id FROM semester_history 
+                            WHERE start_date = ? AND end_date = ?
+                        """, (semester_dates['semester_start'], semester_dates['semester_end']))
+                        semester = cursor.fetchone()
+                        if semester:
+                            # Neue Kurse hinzufügen
+                            for course_id in new_course_ids:  # Hier auch
+                                if course_id not in current_course_ids:
                                     student.add_course(self.parent.db, course_id, semester['id'])
+                            
+                            # Alte Kurse entfernen
+                            for course_id in current_course_ids:
+                                if course_id not in new_course_ids:  # Und hier
+                                    student.remove_course(self.parent.db, course_id, semester['id'])
                     
                     self.refresh_students()
                     self.parent.statusBar().showMessage(
                         f"Schüler {student.get_full_name()} wurde aktualisiert", 3000)
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
-
+            
     def delete_student(self, student_id):
         """Löscht einen Schüler"""
         try:

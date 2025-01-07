@@ -1,11 +1,13 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                           QLineEdit, QDialogButtonBox, QPushButton, QComboBox)
+                           QLineEdit, QDialogButtonBox, QPushButton,
+                           QListWidget, QListWidgetItem)
+from PyQt6.QtCore import Qt
 
 class StudentDialog(QDialog):
     def __init__(self, parent=None, student=None, db=None):
         super().__init__(parent)
         self.student = student
-        self.db = db  # Direkte Referenz auf die Datenbank
+        self.db = db
         self.setWindowTitle("Schüler bearbeiten" if student else "Schüler hinzufügen")
         self.setup_ui()
         
@@ -15,13 +17,14 @@ class StudentDialog(QDialog):
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
-        # Kurs/Klasse Auswahl ganz nach oben
+        # Kurs/Klasse Auswahl
         course_layout = QVBoxLayout()
-        course_layout.addWidget(QLabel("Kurs/Klasse:"))
-        self.course = QComboBox()
-        self.refresh_courses()
-        course_layout.addWidget(self.course)
+        course_layout.addWidget(QLabel("Kurse/Klassen (Mehrfachauswahl möglich):"))
+        self.course_list = QListWidget()
+        self.course_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        course_layout.addWidget(self.course_list)
         layout.addLayout(course_layout)
+        self.refresh_courses()
 
         # Vorname Eingabefeld
         first_name_layout = QVBoxLayout()
@@ -59,14 +62,14 @@ class StudentDialog(QDialog):
         layout.addLayout(button_layout)
 
     def refresh_courses(self):
-        """Lädt die verfügbaren Kurse in die Combobox"""
-        self.course.clear()
+        """Lädt die verfügbaren Kurse in die Liste"""
+        self.course_list.clear()
         try:
-            courses = self.db.get_all_courses()  # Direkter Zugriff auf db
-            print("Geladene Kurse:", courses)
-            self.course.addItem("Kein Kurs", None)
+            courses = self.db.get_all_courses()
             for course in courses:
-                self.course.addItem(course['name'], course['id'])
+                item = QListWidgetItem(course['name'])
+                item.setData(Qt.ItemDataRole.UserRole, course['id'])
+                self.course_list.addItem(item)
         except Exception as e:
             print(f"Fehler beim Laden der Kurse: {e}")
 
@@ -95,24 +98,31 @@ class StudentDialog(QDialog):
 
     def get_data(self) -> dict:
         """Gibt die eingegebenen Daten zurück"""
+        selected_items = self.course_list.selectedItems()
+        course_ids = [item.data(Qt.ItemDataRole.UserRole) for item in selected_items]
+        
         return {
             'first_name': self.first_name.text().strip(),
             'last_name': self.last_name.text().strip(),
-            'course_id': self.course.currentData()
+            'course_ids': course_ids  # Jetzt eine Liste von IDs
         }
+
 
     def load_student_data(self):
         """Lädt die Daten eines existierenden Schülers in den Dialog"""
         if self.student:
             self.first_name.setText(self.student.first_name)
             self.last_name.setText(self.student.last_name)
-                
-            # Aktuellen Kurs laden
-            current_course = self.student.get_current_course(self.db)  # self.db statt self.parent.db
-            if current_course:
-                index = self.course.findData(current_course['id'])
-                if index >= 0:
-                    self.course.setCurrentIndex(index)
+            
+            # Aktuelle Kurse laden
+            current_courses = self.student.get_current_courses(self.db)
+            if current_courses:
+                for i in range(self.course_list.count()):
+                    item = self.course_list.item(i)
+                    course_id = item.data(Qt.ItemDataRole.UserRole)
+                    if any(c['id'] == course_id for c in current_courses):
+                        item.setSelected(True)
+
 
     def clear_input(self):
         """Leert alle Eingabefelder"""
