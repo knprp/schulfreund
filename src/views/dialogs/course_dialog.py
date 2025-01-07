@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QLineEdit, QHBoxLayou
                            QMessageBox)
 from PyQt6.QtGui import QColor
 from src.models.course import Course
+from src.models.student import Student
 
 
 class CourseDialog(QDialog):
@@ -128,39 +129,44 @@ class CourseDialog(QDialog):
                             f"Fehler beim Importieren der Schüler: {str(e)}")
 
 
-def accept(self):
-    """Überschreibt die Standard accept() Methode"""
-    print("Accept wurde aufgerufen")  # DEBUG
-    try:
-        window = self.parent.parent
-        print("Starte Speichern des Kurses")  # DEBUG
-        
-        # 1. Kurs speichern/aktualisieren
-        data = self.get_data()
-        if self.course:
-            print("Aktualisiere existierenden Kurs")  # DEBUG
-            self.course.name = data['name']
-            self.course.type = data['type']
-            self.course.subject = data['subject']
-            self.course.description = data['description']
-            self.course.color = data['color']
-            self.course.update(window.db)
-            course_id = self.course.id
-        else:
-            print("Erstelle neuen Kurs mit Daten:", data)  # DEBUG
-            course = Course.create(window.db, **data)
-            course_id = course.id
-            print(f"Neuer Kurs erstellt mit ID: {course_id}")  # DEBUG
+    def accept(self):
+        """Überschreibt die Standard accept() Methode"""
+        print("Accept wurde aufgerufen")  # DEBUG 
+        try:
+            window = self.parent.parent
+            print("Starte Speichern des Kurses")  # DEBUG
 
-        print("Starte Schüler-Import")  # DEBUG
-        # 2. Wenn Schüler zum Import ausgewählt wurden
-        if self.selected_student_ids:
-            print(f"Importiere {len(self.selected_student_ids)} Schüler")  # DEBUG
-            # ... Rest der Import-Logik ...
+            # 1. Kurs speichern/aktualisieren
+            data = self.get_data()
+            if self.course:
+                print("Aktualisiere existierenden Kurs")  # DEBUG
+                self.course.name = data['name']
+                self.course.type = data['type']
+                self.course.subject = data['subject']
+                self.course.description = data['description']
+                self.course.color = data['color']
+                self.course.update(window.db)
+                course_id = self.course.id
+            else:
+                print("Erstelle neuen Kurs mit Daten:", data)  # DEBUG
+                course = Course.create(window.db, **data)
+                course_id = course.id
 
-        print("Rufe super().accept() auf")  # DEBUG
-        super().accept()  # Standard accept() am Ende aufrufen
+            # 2. Schüler importieren
+            semester_dates = window.db.get_semester_dates()
+            if self.selected_student_ids and semester_dates:
+                # Hole das aktive Semester aus der Historie
+                current_semester = window.db.get_semester_by_date(semester_dates['semester_start'])
+                if current_semester:
+                    print(f"Aktuelles Semester gefunden: {current_semester}")  # DEBUG
+                    for student_id in self.selected_student_ids:
+                        student = Student.get_by_id(window.db, student_id)
+                        if student:
+                            student.add_course(window.db, course_id, current_semester['id'])
 
-    except Exception as e:
-        print(f"Fehler aufgetreten: {e}")  # DEBUG
-        QMessageBox.critical(self, "Fehler", str(e))
+            print("Rufe super().accept() auf")  # DEBUG
+            super().accept()
+
+        except Exception as e:
+            print(f"Fehler aufgetreten: {e}")  # DEBUG
+            QMessageBox.critical(self, "Fehler", str(e))
