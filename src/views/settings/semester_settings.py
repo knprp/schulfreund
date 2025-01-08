@@ -151,10 +151,13 @@ class SemesterSettings(QWidget):
             self.refresh_history_list()
             self.parent.statusBar().showMessage("Halbjahr wurde gespeichert", 3000)
             
+            # Aktualisiere die Semester-Anzeige
+            self.parent.status_display.update_semester_display() 
+
             # Aktualisiere andere Tabs
             if hasattr(self.parent, 'refresh_all'):
                 self.parent.refresh_all()
-                
+                    
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Speichern der Einstellungen: {str(e)}")
 
@@ -179,6 +182,12 @@ class SemesterSettings(QWidget):
             self.start_date.setDate(QDate.fromString(semester_data['start_date'], "yyyy-MM-dd"))
             self.end_date.setDate(QDate.fromString(semester_data['end_date'], "yyyy-MM-dd"))
             self.semester_name.setText(semester_data.get('name', ''))
+            
+            # Speichere das geladene Semester als aktives Semester
+            self.parent.db.save_semester_dates(semester_data['start_date'], semester_data['end_date'])
+            
+            # Aktualisiere die Anzeige über das StatusDisplay
+            self.parent.status_display.update_semester_display()
             self.parent.statusBar().showMessage("Halbjahr aus Historie geladen", 3000)
 
     def delete_selected_semester(self):
