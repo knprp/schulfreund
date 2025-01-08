@@ -17,6 +17,7 @@ from src.views.tabs.student_tab import StudentTab
 from src.views.tabs.competency_tab import CompetencyTab
 from src.views.tabs.settings_tab import SettingsTab
 from src.views.calendar_container import CalendarContainer
+from src.views.status_display import StatusDisplay
 
 class SchoolManagement(QMainWindow):
     def __init__(self):
@@ -40,6 +41,12 @@ class SchoolManagement(QMainWindow):
         
         # ListManager für Kalenderansichten initialisieren
         self.list_manager = ListManager(self)
+        
+        # Status-Display initialisieren
+        self.status_display = StatusDisplay(self)
+
+        # Semester-Anzeige initialisieren
+        self.status_display.update_semester_display()
 
         # Icon setzen - mehrere Versuche
         icon_path = Path('assets/icon.png')
