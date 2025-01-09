@@ -66,14 +66,16 @@ class SemesterSettings(QWidget):
         start_layout.addWidget(QLabel("Start:"))
         self.start_date = QDateEdit()
         self.start_date.setCalendarPopup(True)
+        self.start_date.dateChanged.connect(lambda date: self.end_date.setMinimumDate(date))
         start_layout.addWidget(self.start_date)
         active_layout.addLayout(start_layout)
-        
+
         # End-Datum
         end_layout = QHBoxLayout()
         end_layout.addWidget(QLabel("Ende:"))
         self.end_date = QDateEdit()
         self.end_date.setCalendarPopup(True)
+        self.end_date.dateChanged.connect(lambda date: self.start_date.setMaximumDate(date))
         end_layout.addWidget(self.end_date)
         active_layout.addLayout(end_layout)
         
@@ -141,7 +143,10 @@ class SemesterSettings(QWidget):
             
             if start_date >= end_date:
                 raise ValueError("Das Startdatum muss vor dem Enddatum liegen")
-            
+                
+            if self.check_semester_overlap(start_date, end_date):
+                raise ValueError("Das neue Semester überschneidet sich mit einem existierenden Semester")
+                
             # Speichern als aktives Halbjahr
             self.parent.db.save_semester_dates(start_date, end_date)
             
@@ -152,12 +157,12 @@ class SemesterSettings(QWidget):
             self.parent.statusBar().showMessage("Halbjahr wurde gespeichert", 3000)
             
             # Aktualisiere die Semester-Anzeige
-            self.parent.status_display.update_semester_display() 
-
+            self.parent.status_display.update_semester_display()
+            
             # Aktualisiere andere Tabs
             if hasattr(self.parent, 'refresh_all'):
                 self.parent.refresh_all()
-                    
+                
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Speichern der Einstellungen: {str(e)}")
 
@@ -241,3 +246,12 @@ class SemesterSettings(QWidget):
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Einstellungen: {str(e)}")
+
+    def check_semester_overlap(self, start_date, end_date):
+        """Prüft, ob sich ein Semester mit existierenden Semestern überschneidet"""
+        history = self.parent.db.get_semester_history()
+        for semester in history:
+            if (start_date <= semester['end_date'] and 
+                end_date >= semester['start_date']):
+                return True
+        return False
