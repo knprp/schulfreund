@@ -2,10 +2,11 @@
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QLineEdit, QHBoxLayout,
                            QComboBox, QDialogButtonBox, QPushButton, QColorDialog,
-                           QMessageBox)
+                           QMessageBox, QFileDialog)
 from PyQt6.QtGui import QColor
 from src.models.course import Course
 from src.models.student import Student
+from src.views.dialogs.import_csv_students_dialog import ImportCsvStudentsDialog
 
 
 class CourseDialog(QDialog):
@@ -13,6 +14,7 @@ class CourseDialog(QDialog):
         super().__init__(parent)
         self.parent = parent
         self.course = course
+        self.db = parent.parent.db
         self.selected_student_ids = []  # Neue Variable für Import
         self.setWindowTitle("Kurs hinzufügen" if not course else "Kurs bearbeiten")
         self.color = QColor('#FFFFFF')
@@ -58,13 +60,19 @@ class CourseDialog(QDialog):
         color_layout.addWidget(self.color_button)
         layout.addLayout(color_layout)
 
-        # Import Button
+        # Import-Buttons nebeneinander
         import_layout = QHBoxLayout()
-        self.import_button = QPushButton("Schüler importieren...")
-        self.import_button.clicked.connect(self.import_students)
-        import_layout.addWidget(self.import_button)
-        import_layout.addStretch()
+        
+        import_csv_btn = QPushButton("Schüler aus CSV importieren")
+        import_csv_btn.clicked.connect(self.import_from_csv)
+        import_layout.addWidget(import_csv_btn)
+        
+        import_existing_btn = QPushButton("Schüler aus anderen Kursen importieren")
+        import_existing_btn.clicked.connect(self.import_existing_students)
+        import_layout.addWidget(import_existing_btn)
+        
         layout.addLayout(import_layout)
+
 
         # Button Box erstellen aber NICHT verbinden
         self.button_box = QDialogButtonBox(
@@ -114,7 +122,7 @@ class CourseDialog(QDialog):
         }
         return data
 
-    def import_students(self):
+    def import_existing_students(self):
         """Öffnet den Import-Dialog für Schüler"""
         from src.views.dialogs.import_students_dialog import ImportStudentsDialog
         try:
@@ -127,6 +135,20 @@ class CourseDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Fehler", 
                             f"Fehler beim Importieren der Schüler: {str(e)}")
+
+    def import_from_csv(self):
+        if not self.course:
+            QMessageBox.warning(self, "Fehler", "Bitte speichern Sie den Kurs zuerst")
+            return
+            
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "CSV-Datei auswählen", "", "CSV Dateien (*.csv)")
+        if filepath:
+            dialog = ImportCsvStudentsDialog(self, self.db)
+            dialog.load_csv_data(filepath)
+            if dialog.exec():
+                self.parent.refresh_courses()  # Aktualisiere die Kurstabelle
+                QMessageBox.information(self, "Erfolg", "Die Schüler wurden erfolgreich importiert")
 
 
     def accept(self):
