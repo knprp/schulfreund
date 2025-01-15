@@ -190,12 +190,105 @@ class DatabaseManager:
                 )
             ''')
 
+            # Notensysteme (z.B. Unterstufe 1-6, Oberstufe 0-15)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS grading_systems (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    min_grade REAL NOT NULL,
+                    max_grade REAL NOT NULL,
+                    step_size REAL NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Beispiel-Notensysteme einfügen
+            cursor.execute('''
+                INSERT OR IGNORE INTO grading_systems 
+                (name, min_grade, max_grade, step_size, description)
+                VALUES 
+                ('Unterstufe (1-6)', 1.0, 6.0, 0.33, 'Klassisches Notensystem mit + und -'),
+                ('Oberstufe (0-15)', 0.0, 15.0, 1.0, 'Punktesystem der gymnasialen Oberstufe')
+            ''')
+
+            # Vorlagen für Bewertungstypen
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS assessment_type_templates (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    description TEXT,
+                    grading_system_id INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (grading_system_id) REFERENCES grading_systems(id)
+                )
+            ''')
+
+            # Einzelne Bewertungstypen in Vorlagen
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS template_items (
+                    id INTEGER PRIMARY KEY,
+                    template_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    parent_item_id INTEGER,
+                    default_weight REAL DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (template_id) REFERENCES assessment_type_templates(id) ON DELETE CASCADE,
+                    FOREIGN KEY (parent_item_id) REFERENCES template_items(id) ON DELETE CASCADE
+                )
+            ''')
+
+            # Konkrete Bewertungstypen für Kurse
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS assessment_types (
+                    id INTEGER PRIMARY KEY,
+                    course_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    parent_type_id INTEGER,
+                    weight REAL DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+                    FOREIGN KEY (parent_type_id) REFERENCES assessment_types(id) ON DELETE CASCADE
+                )
+            ''')
+
+            # Konkrete Bewertungen/Noten
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS assessments (
+                    id INTEGER PRIMARY KEY,
+                    student_id INTEGER NOT NULL,
+                    course_id INTEGER NOT NULL,
+                    assessment_type_id INTEGER NOT NULL,
+                    lesson_id INTEGER,
+                    grade REAL NOT NULL,
+                    date TEXT NOT NULL,
+                    topic TEXT,
+                    comment TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+                    FOREIGN KEY (assessment_type_id) REFERENCES assessment_types(id) ON DELETE CASCADE,
+                    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE SET NULL
+                )
+            ''')
+
+            # Tabelle für Abwesenheiten
+            cursor.execute('''    
+                CREATE TABLE IF NOT EXISTS student_attendance (
+                    id INTEGER PRIMARY KEY,
+                    student_id INTEGER NOT NULL,
+                    lesson_id INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE,
+                    UNIQUE(student_id, lesson_id)
+                )
+            ''')
+
             self.conn.commit()               
         except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Erstellen der Tabellen: {e}")
-
-
-                                      
+            raise Exception(f"Fehler beim Erstellen der Tabellen: {e}")                 
 
                    # Indizes für bessere Performance
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id)')
@@ -228,11 +321,11 @@ class DatabaseManager:
         """Holt alle Schüler aus der Datenbank."""
         try:
             cursor = self.execute(
-                "SELECT id, name FROM students ORDER BY name"
+                "SELECT id, first_name, last_name FROM students ORDER BY last_name, first_name"
             )
             return [dict(row) for row in cursor.fetchall()]
         except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Abrufen der Schüler: {e}")    
+            raise Exception(f"Fehler beim Abrufen der Schüler: {e}")
 
     def update_student(self, student_id: int, name: str) -> None:
         """Aktualisiert die Daten eines Schülers."""
@@ -1002,3 +1095,708 @@ class DatabaseManager:
             return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             raise Exception(f"Fehler beim Laden der Schüler: {str(e)}")
+
+
+# Neue Methoden für die Verwaltung von Notensystemen:
+
+    def add_grading_system(self, name: str, min_grade: float, max_grade: float, 
+                          step_size: float, description: str = None) -> int:
+        """Fügt ein neues Notensystem hinzu."""
+        try:
+            cursor = self.execute(
+                """INSERT INTO grading_systems 
+                   (name, min_grade, max_grade, step_size, description)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (name, min_grade, max_grade, step_size, description)
+            )
+            return cursor.lastrowid
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen des Notensystems: {str(e)}")
+
+    def get_grading_system(self, system_id: int) -> dict:
+        """Holt ein einzelnes Notensystem."""
+        try:
+            cursor = self.execute(
+                "SELECT * FROM grading_systems WHERE id = ?",
+                (system_id,)
+            )
+            result = cursor.fetchone()
+            return dict(result) if result else None
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen des Notensystems: {str(e)}")
+
+    def get_all_grading_systems(self) -> list:
+        """Holt alle verfügbaren Notensysteme."""
+        try:
+            cursor = self.execute(
+                "SELECT * FROM grading_systems ORDER BY name"
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Notensysteme: {str(e)}")
+
+    def update_grading_system(self, system_id: int, name: str, min_grade: float,
+                            max_grade: float, step_size: float, description: str = None) -> None:
+        """Aktualisiert ein bestehendes Notensystem."""
+        try:
+            self.execute(
+                """UPDATE grading_systems 
+                   SET name = ?, min_grade = ?, max_grade = ?, 
+                       step_size = ?, description = ?
+                   WHERE id = ?""",
+                (name, min_grade, max_grade, step_size, description, system_id)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Aktualisieren des Notensystems: {str(e)}")
+
+    def delete_grading_system(self, system_id: int) -> None:
+        """Löscht ein Notensystem."""
+        try:
+            self.execute(
+                "DELETE FROM grading_systems WHERE id = ?",
+                (system_id,)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen des Notensystems: {str(e)}")
+
+    def validate_grade(self, grade: float, system_id: int) -> bool:
+        """Prüft ob eine Note in einem Notensystem gültig ist."""
+        try:
+            system = self.get_grading_system(system_id)
+            if not system:
+                raise ValueError("Notensystem nicht gefunden")
+                
+            # Prüfe ob Note im erlaubten Bereich liegt
+            if grade < system['min_grade'] or grade > system['max_grade']:
+                return False
+                
+            # Prüfe ob Note ein gültiger Schritt ist
+            steps = round((grade - system['min_grade']) / system['step_size'])
+            valid_grade = system['min_grade'] + (steps * system['step_size'])
+            
+            # Berücksichtige Rundungsfehler
+            return abs(grade - valid_grade) < 0.0001
+            
+        except Exception as e:
+            raise Exception(f"Fehler bei der Notenvalidierung: {str(e)}")
+
+# Neue Methoden für die Verwaltung von Templates:
+
+    def add_assessment_template(self, name: str, subject: str, 
+                              grading_system_id: int, description: str = None) -> int:
+        """Fügt eine neue Bewertungstyp-Vorlage hinzu."""
+        try:
+            cursor = self.execute(
+                """INSERT INTO assessment_type_templates 
+                   (name, subject, grading_system_id, description)
+                   VALUES (?, ?, ?, ?)""",
+                (name, subject, grading_system_id, description)
+            )
+            return cursor.lastrowid
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen der Vorlage: {str(e)}")
+
+    def add_template_item(self, template_id: int, name: str, 
+                         parent_item_id: int = None, default_weight: float = 1.0) -> int:
+        """Fügt einen Bewertungstyp zu einer Vorlage hinzu."""
+        try:
+            cursor = self.execute(
+                """INSERT INTO template_items 
+                   (template_id, name, parent_item_id, default_weight)
+                   VALUES (?, ?, ?, ?)""",
+                (template_id, name, parent_item_id, default_weight)
+            )
+            return cursor.lastrowid
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen des Vorlagenelements: {str(e)}")
+
+    def get_assessment_template(self, template_id: int) -> dict:
+        """Holt eine einzelne Bewertungstyp-Vorlage."""
+        try:
+            cursor = self.execute(
+                """SELECT t.*, g.name as grading_system_name
+                   FROM assessment_type_templates t
+                   JOIN grading_systems g ON t.grading_system_id = g.id
+                   WHERE t.id = ?""",
+                (template_id,)
+            )
+            result = cursor.fetchone()
+            return dict(result) if result else None
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Vorlage: {str(e)}")
+
+    def get_template_items(self, template_id: int) -> list:
+        """Holt alle Bewertungstypen einer Vorlage hierarchisch sortiert."""
+        try:
+            # Zuerst die Root-Items (ohne parent)
+            cursor = self.execute(
+                """WITH RECURSIVE template_tree AS (
+                    -- Root items (ohne parent)
+                    SELECT id, name, parent_item_id, default_weight, 
+                           0 as level, CAST(name as TEXT) as path
+                    FROM template_items
+                    WHERE template_id = ? AND parent_item_id IS NULL
+                    
+                    UNION ALL
+                    
+                    -- Child items
+                    SELECT i.id, i.name, i.parent_item_id, i.default_weight,
+                           tt.level + 1, 
+                           tt.path || '>' || i.name
+                    FROM template_items i
+                    JOIN template_tree tt ON i.parent_item_id = tt.id
+                )
+                SELECT * FROM template_tree
+                ORDER BY path;""",
+                (template_id,)
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Vorlagenelemente: {str(e)}")
+
+    def get_templates_by_subject(self, subject: str) -> list:
+        """Holt alle Vorlagen für ein bestimmtes Fach."""
+        try:
+            cursor = self.execute(
+                """SELECT t.*, g.name as grading_system_name,
+                          (SELECT COUNT(*) FROM template_items 
+                           WHERE template_id = t.id) as item_count
+                   FROM assessment_type_templates t
+                   JOIN grading_systems g ON t.grading_system_id = g.id
+                   WHERE t.subject = ?
+                   ORDER BY t.name""",
+                (subject,)
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Vorlagen: {str(e)}")
+
+    def update_assessment_template(self, template_id: int, name: str, 
+                                 subject: str, grading_system_id: int, 
+                                 description: str = None) -> None:
+        """Aktualisiert eine bestehende Vorlage."""
+        try:
+            self.execute(
+                """UPDATE assessment_type_templates 
+                   SET name = ?, subject = ?, 
+                       grading_system_id = ?, description = ?
+                   WHERE id = ?""",
+                (name, subject, grading_system_id, description, template_id)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Aktualisieren der Vorlage: {str(e)}")
+
+    def update_template_item(self, item_id: int, name: str, 
+                           parent_item_id: int = None, 
+                           default_weight: float = 1.0) -> None:
+        """Aktualisiert ein Vorlagenelement."""
+        try:
+            self.execute(
+                """UPDATE template_items 
+                   SET name = ?, parent_item_id = ?, default_weight = ?
+                   WHERE id = ?""",
+                (name, parent_item_id, default_weight, item_id)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Aktualisieren des Vorlagenelements: {str(e)}")
+
+    def delete_assessment_template(self, template_id: int) -> None:
+        """Löscht eine Vorlage und alle ihre Elemente."""
+        # Dank ON DELETE CASCADE werden auch alle template_items gelöscht
+        try:
+            self.execute(
+                "DELETE FROM assessment_type_templates WHERE id = ?",
+                (template_id,)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen der Vorlage: {str(e)}")
+
+    def delete_template_item(self, item_id: int) -> None:
+        """Löscht ein Vorlagenelement."""
+        try:
+            self.execute(
+                "DELETE FROM template_items WHERE id = ?",
+                (item_id,)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen des Vorlagenelements: {str(e)}")
+
+
+# Neue Methoden für die Verwaltung von Assessment Types:
+
+    def create_assessment_types_from_template(self, course_id: int, template_id: int) -> None:
+        """Erstellt Bewertungstypen für einen Kurs basierend auf einer Vorlage."""
+        try:
+            # Hole alle Template-Items
+            template_items = self.get_template_items(template_id)
+            if not template_items:
+                raise ValueError("Keine Template-Items gefunden")
+
+            # Dictionary zum Speichern der ID-Zuordnungen (template_item_id -> assessment_type_id)
+            id_mapping = {}
+
+            # Items der Reihe nach einfügen (sind bereits hierarchisch sortiert)
+            for item in template_items:
+                # Wenn es ein Parent-Item gibt, nutze die gemappte ID
+                parent_id = None
+                if item['parent_item_id']:
+                    parent_id = id_mapping.get(item['parent_item_id'])
+
+                # Füge neuen Assessment Type hinzu
+                new_id = self.add_assessment_type(
+                    course_id=course_id,
+                    name=item['name'],
+                    parent_type_id=parent_id,
+                    weight=item['default_weight']
+                )
+                
+                # Speichere ID-Zuordnung
+                id_mapping[item['id']] = new_id
+
+        except Exception as e:
+            raise Exception(f"Fehler beim Erstellen der Bewertungstypen: {str(e)}")
+
+    def add_assessment_type(self, course_id: int, name: str, 
+                          parent_type_id: int = None, weight: float = 1.0) -> int:
+        """Fügt einen neuen Bewertungstyp hinzu."""
+        try:
+            cursor = self.execute(
+                """INSERT INTO assessment_types 
+                   (course_id, name, parent_type_id, weight)
+                   VALUES (?, ?, ?, ?)""",
+                (course_id, name, parent_type_id, weight)
+            )
+            return cursor.lastrowid
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen des Bewertungstyps: {str(e)}")
+
+    def get_assessment_types(self, course_id: int) -> list:
+        """Holt alle Bewertungstypen eines Kurses hierarchisch sortiert."""
+        try:
+            cursor = self.execute(
+                """WITH RECURSIVE type_tree AS (
+                    -- Root types (ohne parent)
+                    SELECT id, name, parent_type_id, weight, 
+                           0 as level, CAST(name as TEXT) as path
+                    FROM assessment_types
+                    WHERE course_id = ? AND parent_type_id IS NULL
+                    
+                    UNION ALL
+                    
+                    -- Child types
+                    SELECT t.id, t.name, t.parent_type_id, t.weight,
+                           tt.level + 1, 
+                           tt.path || '>' || t.name
+                    FROM assessment_types t
+                    JOIN type_tree tt ON t.parent_type_id = tt.id
+                )
+                SELECT * FROM type_tree
+                ORDER BY path;""",
+                (course_id,)
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Bewertungstypen: {str(e)}")
+
+# Neue Methoden für die Verwaltung von Assessments (Noten):
+
+# In db_manager.py
+
+    def validate_assessment_input(self, student_id: int, course_id: int, 
+                                assessment_type_id: int, grade: float, 
+                                date: str) -> None:
+        """
+        Validiert die Eingabedaten für eine neue Note.
+        Wirft eine Exception wenn die Daten ungültig sind.
+        """
+        try:
+            # 1. Prüfe ob der Schüler im Kurs ist
+            cursor = self.execute(
+                """SELECT semester_id, start_date, end_date 
+                   FROM student_courses sc
+                   JOIN semester_history sh ON sc.semester_id = sh.id
+                   WHERE student_id = ? AND course_id = ?
+                   AND start_date <= ? AND end_date >= ?""",
+                (student_id, course_id, date, date)
+            )
+            if not cursor.fetchone():
+                raise ValueError(
+                    f"Der Schüler (ID: {student_id}) ist zu diesem Zeitpunkt "
+                    f"nicht im Kurs (ID: {course_id})"
+                )
+
+            # 2. Prüfe ob der Bewertungstyp zum Kurs gehört
+            cursor = self.execute(
+                "SELECT id FROM assessment_types WHERE id = ? AND course_id = ?",
+                (assessment_type_id, course_id)
+            )
+            if not cursor.fetchone():
+                raise ValueError(
+                    f"Der Bewertungstyp (ID: {assessment_type_id}) gehört "
+                    f"nicht zum Kurs (ID: {course_id})"
+                )
+
+            # 3. Prüfe ob die Note zum Notensystem passt
+            cursor = self.execute(
+                """SELECT gs.* 
+                   FROM assessment_type_templates att
+                   JOIN grading_systems gs ON att.grading_system_id = gs.id
+                   WHERE att.id = ?""",
+                (assessment_type_id,)
+            )
+            grading_system = cursor.fetchone()
+            if grading_system:
+                if not self.validate_grade(grade, grading_system['id']):
+                    raise ValueError(
+                        f"Die Note {grade} ist im Notensystem "
+                        f"'{grading_system['name']}' nicht gültig"
+                    )
+
+        except Exception as e:
+            raise ValueError(f"Validierungsfehler: {str(e)}")
+
+    def get_assessment_statistics(self, course_id: int, 
+                                start_date: str = None, 
+                                end_date: str = None) -> dict:
+        """
+        Berechnet verschiedene Statistiken für einen Kurs.
+        
+        Returns:
+            Dict mit verschiedenen statistischen Werten.
+        """
+        try:
+            # Basisteil der Query
+            query = """
+                SELECT 
+                    COUNT(*) as total_count,
+                    AVG(a.grade) as average_grade,
+                    MIN(a.grade) as best_grade,
+                    MAX(a.grade) as worst_grade,
+                    a.assessment_type_id,
+                    t.name as type_name
+                FROM assessments a
+                JOIN assessment_types t ON a.assessment_type_id = t.id
+                WHERE a.course_id = ?
+            """
+            params = [course_id]
+
+            # Zeitraum-Filter hinzufügen wenn angegeben
+            if start_date:
+                query += " AND date >= ?"
+                params.append(start_date)
+            if end_date:
+                query += " AND date <= ?"
+                params.append(end_date)
+
+            # Gruppierung nach Bewertungstyp
+            query += " GROUP BY assessment_type_id"
+
+            cursor = self.execute(query, tuple(params))
+            type_stats = {row['type_name']: dict(row) for row in cursor.fetchall()}
+
+            # Gesamtstatistik
+            total_query = """
+                SELECT 
+                    COUNT(*) as total_count,
+                    AVG(a.grade) as average_grade,
+                    MIN(a.grade) as best_grade,
+                    MAX(a.grade) as worst_grade
+                FROM assessments a
+                WHERE a.course_id = ?
+            """
+            if start_date:
+                total_query += " AND date >= ?"
+            if end_date:
+                total_query += " AND date <= ?"
+
+            cursor = self.execute(total_query, tuple(params))
+            total_stats = dict(cursor.fetchone())
+
+            return {
+                'total': total_stats,
+                'by_type': type_stats
+            }
+
+        except Exception as e:
+            raise Exception(f"Fehler bei der Berechnung der Statistik: {str(e)}")
+
+    def get_student_grade_history(self, student_id: int, course_id: int, 
+                                assessment_type_id: int = None) -> list:
+        """
+        Holt die Notenentwicklung eines Schülers.
+        
+        Args:
+            student_id: ID des Schülers
+            course_id: ID des Kurses
+            assessment_type_id: Optional, für einen bestimmten Bewertungstyp
+
+        Returns:
+            Liste von Noten, chronologisch sortiert
+        """
+        try:
+            query = """
+                SELECT 
+                    a.*,
+                    t.name as type_name,
+                    t.weight as type_weight
+                FROM assessments a
+                JOIN assessment_types t ON a.assessment_type_id = t.id
+                WHERE a.student_id = ? AND a.course_id = ?
+            """
+            params = [student_id, course_id]
+
+            if assessment_type_id:
+                query += " AND a.assessment_type_id = ?"
+                params.append(assessment_type_id)
+
+            query += " ORDER BY a.date"
+
+            cursor = self.execute(query, tuple(params))
+            return [dict(row) for row in cursor.fetchall()]
+
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Notenhistorie: {str(e)}")
+
+    def get_course_grade_export(self, course_id: int) -> dict:
+        """
+        Erstellt eine exportierbare Übersicht aller Noten eines Kurses.
+        
+        Returns:
+            Dict mit Kursinformationen und Notendaten
+        """
+        try:
+            # 1. Kursinformationen
+            cursor = self.execute(
+                "SELECT * FROM courses WHERE id = ?",
+                (course_id,)
+            )
+            course = dict(cursor.fetchone())
+
+            # 2. Bewertungstypen (hierarchisch)
+            types = self.get_assessment_types(course_id)
+
+            # 3. Schüler im Kurs
+            cursor = self.execute(
+                """SELECT DISTINCT s.* 
+                   FROM students s
+                   JOIN student_courses sc ON s.id = sc.student_id
+                   WHERE sc.course_id = ?
+                   ORDER BY s.last_name, s.first_name""",
+                (course_id,)
+            )
+            students = [dict(row) for row in cursor.fetchall()]
+
+            # 4. Alle Noten
+            cursor = self.execute(
+                """SELECT 
+                       a.*,
+                       t.name as type_name,
+                       s.last_name,
+                       s.first_name
+                   FROM assessments a
+                   JOIN assessment_types t ON a.assessment_type_id = t.id
+                   JOIN students s ON a.student_id = s.id
+                   WHERE a.course_id = ?
+                   ORDER BY s.last_name, s.first_name, a.date""",
+                (course_id,)
+            )
+            grades = [dict(row) for row in cursor.fetchall()]
+
+            # 5. Statistiken
+            statistics = self.get_assessment_statistics(course_id)
+
+            return {
+                'course': course,
+                'types': types,
+                'students': students,
+                'grades': grades,
+                'statistics': statistics
+            }
+
+        except Exception as e:
+            raise Exception(f"Fehler beim Erstellen der Exportdaten: {str(e)}")
+
+    def add_assessment(self, data: dict) -> int:
+        """Fügt eine neue Bewertung/Note hinzu oder aktualisiert eine bestehende."""
+        try:
+            # Prüfe ob bereits eine Note existiert
+            cursor = self.execute(
+                """SELECT id FROM assessments 
+                WHERE student_id = ? AND lesson_id = ?""",
+                (data['student_id'], data['lesson_id'])
+            )
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update existierende Note
+                cursor = self.execute(
+                    """UPDATE assessments 
+                    SET grade = ?, assessment_type_id = ?, 
+                        course_id = ?, date = ?, 
+                        topic = ?, comment = ?
+                    WHERE student_id = ? AND lesson_id = ?""",
+                    (data['grade'], 
+                    data['assessment_type_id'],
+                    data['course_id'],
+                    data['date'],
+                    data.get('topic'),
+                    data.get('comment'),
+                    data['student_id'],
+                    data['lesson_id'])
+                )
+                return existing['id']
+            else:
+                # Füge neue Note hinzu
+                cursor = self.execute(
+                    """INSERT INTO assessments 
+                    (student_id, course_id, assessment_type_id, grade,
+                        date, lesson_id, topic, comment)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (data['student_id'], 
+                    data['course_id'],
+                    data['assessment_type_id'], 
+                    data['grade'],
+                    data['date'],
+                    data['lesson_id'],
+                    data.get('topic'),
+                    data.get('comment'))
+                )
+                return cursor.lastrowid
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen/Aktualisieren der Note: {str(e)}")
+
+    def delete_assessment(self, student_id: int, lesson_id: int) -> None:
+        """Löscht eine Note für einen Schüler in einer bestimmten Stunde."""
+        try:
+            self.execute(
+                """DELETE FROM assessments 
+                WHERE student_id = ? AND lesson_id = ?""",
+                (student_id, lesson_id)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen der Note: {str(e)}")
+
+    def get_student_assessments(self, student_id: int, course_id: int) -> list:
+        """Holt alle Noten eines Schülers in einem Kurs."""
+        try:
+            cursor = self.execute(
+                """SELECT a.*, t.name as type_name, t.weight as type_weight
+                   FROM assessments a
+                   JOIN assessment_types t ON a.assessment_type_id = t.id
+                   WHERE a.student_id = ? AND a.course_id = ?
+                   ORDER BY a.date DESC""",
+                (student_id, course_id)
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Noten: {str(e)}")
+
+    def get_lesson_assessment(self, student_id: int, lesson_id: int) -> Optional[dict]:
+        """Holt die Note eines Schülers für eine bestimmte Stunde."""
+        try:
+            cursor = self.execute(
+                """SELECT * FROM assessments 
+                WHERE student_id = ? AND lesson_id = ?""",
+                (student_id, lesson_id)
+            )
+            result = cursor.fetchone()
+            return dict(result) if result else None
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der Note: {str(e)}")
+
+    def get_course_assessments(self, course_id: int, assessment_type_id: int = None) -> list:
+        """Holt alle Noten eines Kurses, optional gefiltert nach Bewertungstyp."""
+        try:
+            if assessment_type_id:
+                cursor = self.execute(
+                    """SELECT a.*, s.name as student_name, t.name as type_name
+                       FROM assessments a
+                       JOIN students s ON a.student_id = s.id
+                       JOIN assessment_types t ON a.assessment_type_id = t.id
+                       WHERE a.course_id = ? AND a.assessment_type_id = ?
+                       ORDER BY s.name, a.date DESC""",
+                    (course_id, assessment_type_id)
+                )
+            else:
+                cursor = self.execute(
+                    """SELECT a.*, s.name as student_name, t.name as type_name
+                       FROM assessments a
+                       JOIN students s ON a.student_id = s.id
+                       JOIN assessment_types t ON a.assessment_type_id = t.id
+                       WHERE a.course_id = ?
+                       ORDER BY s.name, t.name, a.date DESC""",
+                    (course_id,)
+                )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Abrufen der Kursnoten: {str(e)}")
+
+    def calculate_final_grade(self, student_id: int, course_id: int) -> float:
+        """Berechnet die Gesamtnote eines Schülers in einem Kurs."""
+        try:
+            # Hole alle Bewertungstypen und deren Gewichtungen
+            types = self.get_assessment_types(course_id)
+            if not types:
+                return None
+
+            # Berechne gewichtete Durchschnitte für jeden Typ
+            def calculate_type_average(type_id):
+                cursor = self.execute(
+                    """SELECT AVG(grade) as avg_grade
+                       FROM assessments
+                       WHERE student_id = ? AND course_id = ? 
+                             AND assessment_type_id = ?""",
+                    (student_id, course_id, type_id)
+                )
+                result = cursor.fetchone()
+                return result['avg_grade'] if result else None
+
+            # Nur Root-Level Typen (ohne parent) für Endnote
+            root_types = [t for t in types if not t['parent_type_id']]
+            
+            weighted_sum = 0
+            weight_sum = 0
+            
+            for type_data in root_types:
+                avg = calculate_type_average(type_data['id'])
+                if avg is not None:
+                    weighted_sum += avg * type_data['weight']
+                    weight_sum += type_data['weight']
+
+            return round(weighted_sum / weight_sum, 2) if weight_sum > 0 else None
+
+        except Exception as e:
+            raise Exception(f"Fehler bei der Notenberechnung: {str(e)}")
+
+    def mark_student_absent(self, lesson_id: int, student_id: int) -> None:
+        """Markiert einen Schüler als abwesend für eine Stunde."""
+        try:
+            self.execute(
+                """INSERT OR REPLACE INTO student_attendance 
+                (student_id, lesson_id)
+                VALUES (?, ?)""",
+                (student_id, lesson_id)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Markieren der Abwesenheit: {str(e)}")
+
+    def mark_student_present(self, lesson_id: int, student_id: int) -> None:
+        """Löscht einen Abwesenheitseintrag (= Schüler war anwesend)."""
+        try:
+            self.execute(
+                "DELETE FROM student_attendance WHERE lesson_id = ? AND student_id = ?",
+                (lesson_id, student_id)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Markieren der Anwesenheit: {str(e)}")
+
+    def get_absent_students(self, lesson_id: int) -> List[int]:
+        """Holt die IDs aller abwesenden Schüler für eine Stunde."""
+        try:
+            cursor = self.execute(
+                "SELECT student_id FROM student_attendance WHERE lesson_id = ?",
+                (lesson_id,)
+            )
+            return [row['student_id'] for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der Abwesenheiten: {str(e)}")    
