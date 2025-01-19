@@ -259,22 +259,20 @@ class LessonDetailsDialog(QDialog):
                 # Note
                 grade_combo = QComboBox()
                 self.setup_grade_combo(grade_combo)
+                # Verbinde Signal mit Row-Information
+                grade_combo.currentIndexChanged.connect(
+                    lambda idx, r=row: self.on_grade_changed(idx, r)
+                )
                 
                 # Prüfe ob es bereits eine Note gibt
-                print(f"DEBUG: Loading assessment for student {student['id']}")
-
                 try:
                     assessment = self.main_window.db.get_lesson_assessment(
                         student['id'], 
                         self.lesson_id
-                    )
-                    print(f"DEBUG: Got assessment: {assessment}")  # Neue Debug-Ausgabe
-                    
+                    )                   
                     if assessment:
                         grade_str = self.number_to_grade(assessment['grade'])
-                        print(f"DEBUG: Converted to grade string: {grade_str}")  # Neue Debug-Ausgabe
                         index = grade_combo.findText(grade_str)
-                        print(f"DEBUG: Found at index: {index}")  # Neue Debug-Ausgabe
                         if index >= 0:
                             grade_combo.setCurrentIndex(index)
                 except Exception as e:
@@ -289,9 +287,36 @@ class LessonDetailsDialog(QDialog):
         """Richtet die Noten-Combobox ein"""
         # Keine Note als erste Option
         combo.addItem("")
-        # Zunächst nur Unterstufen-Noten
+        # Unterstufen-Noten
         grades = [
-            "", "1+", "1", "1-", "2+", "2", "2-", "3+", "3", "3-",
+            "1+", "1", "1-", "2+", "2", "2-", "3+", "3", "3-",
             "4+", "4", "4-", "5+", "5", "5-", "6"
         ]
         combo.addItems(grades)
+
+
+    def on_grade_changed(self, index: int, row: int):
+        """Handler für Notenänderungen"""
+        # Hole die ComboBox für diese Zeile direkt aus der Tabelle
+        combo = self.students_table.cellWidget(row, 2)
+        if not combo:  # Sicherheitscheck
+            return
+            
+        attendance_checkbox = self.students_table.cellWidget(row, 1)
+        if not attendance_checkbox:  # Sicherheitscheck
+            return
+            
+        grade_str = combo.currentText()
+        
+        if grade_str and not attendance_checkbox.isChecked():
+            if QMessageBox.question(
+                self,
+                "Abwesender Schüler",
+                "Der Schüler ist als abwesend markiert. Möchten Sie trotzdem eine Note vergeben?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) == QMessageBox.StandardButton.No:
+                # Blockiere temporär das Signal um Endlosschleife zu vermeiden
+                combo.blockSignals(True)
+                combo.setCurrentIndex(0)  # Setze zurück auf "keine Note"
+                combo.blockSignals(False)
