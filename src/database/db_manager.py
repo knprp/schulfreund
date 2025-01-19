@@ -698,15 +698,18 @@ class DatabaseManager:
         except sqlite3.Error as e:
             raise Exception(f"Fehler beim Abrufen der Note: {e}")
 
-    def add_lesson_competency(self, lesson_id: int, competency_id: int):
-        """Fügt eine Verbindung zwischen Unterrichtsstunde und Kompetenz hinzu."""
+    def add_lesson_competency(self, lesson_id: int, competency_id: int) -> None:
+        """Fügt eine Verknüpfung zwischen Unterrichtsstunde und Kompetenz hinzu."""
         try:
             self.execute(
                 "INSERT INTO lesson_competencies (lesson_id, competency_id) VALUES (?, ?)",
                 (lesson_id, competency_id)
             )
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Verknüpfen von Stunde und Kompetenz: {e}")
+        except sqlite3.IntegrityError:
+            # Falls die Verknüpfung bereits existiert, ignorieren wir den Fehler
+            pass
+        except Exception as e:
+            raise Exception(f"Fehler beim Verknüpfen von Stunde und Kompetenz: {str(e)}")
 
     def get_lesson(self, lesson_id: int) -> dict:
             """Holt eine einzelne Unterrichtsstunde."""
