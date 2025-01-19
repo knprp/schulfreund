@@ -50,6 +50,30 @@ class LessonDetailsDialog(QDialog):
         general_layout.addWidget(QLabel("Thema:"))
         self.topic = QLineEdit()
         general_layout.addWidget(self.topic)
+
+        # Kompetenzen
+        competencies_layout = QVBoxLayout()
+        competencies_layout.addWidget(QLabel("Kompetenzen:"))
+
+        # Container für die Kompetenz-Auswahl
+        self.competencies_container = QVBoxLayout()
+
+        # Erste Kompetenz-Zeile hinzufügen
+        self.add_competency_row(is_first_row=True)
+
+        # Plus-Button für weitere Kompetenzen
+        add_competency_button = QPushButton("+")
+        add_competency_button.clicked.connect(self.add_competency_row)
+        add_competency_button.setMaximumWidth(30)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(add_competency_button)
+
+        competencies_layout.addLayout(self.competencies_container)
+        competencies_layout.addLayout(button_layout)
+        general_layout.addLayout(competencies_layout)
+
         
         # Hausaufgaben
         general_layout.addWidget(QLabel("Hausaufgaben:"))
@@ -66,6 +90,11 @@ class LessonDetailsDialog(QDialog):
         # Tab: Schüler
         students_tab = QWidget()
         students_layout = QVBoxLayout(students_tab)
+
+        # Label für ausgewählte Kompetenzen
+        self.competencies_label = QLabel()
+        self.update_competencies_label()  # Initial Label setzen
+        students_layout.addWidget(self.competencies_label)
         
         # Tabelle für Schüler
         self.students_table = QTableWidget()
@@ -105,6 +134,53 @@ class LessonDetailsDialog(QDialog):
         
         # Lade Schüler und deren Anwesenheit
         self.load_students()
+
+        self.topic.setText(self.lesson.get('topic', ''))
+        self.homework.setText(self.lesson.get('homework', ''))
+        
+        # Kompetenzen laden
+        try:
+            # Alle bestehenden Kompetenz-Reihen entfernen (außer der ersten)
+            while self.competencies_container.count() > 1:
+                layout_item = self.competencies_container.takeAt(self.competencies_container.count() - 1)
+                if layout_item and layout_item.layout():
+                    self.remove_competency_row(layout_item.layout())
+
+            # Kompetenzen der Stunde laden
+            cursor = self.main_window.db.execute(
+                """SELECT c.* FROM competencies c
+                JOIN lesson_competencies lc ON c.id = lc.competency_id
+                WHERE lc.lesson_id = ?
+                ORDER BY c.area, c.description""",
+                (self.lesson_id,)
+            )
+            competencies = cursor.fetchall()
+            
+            # Erste ComboBox aktualisieren/befüllen wenn Kompetenzen vorhanden
+            if competencies:
+                first_comp = competencies[0]
+                first_combo = self.competencies_container.itemAt(0).layout().itemAt(0).widget()
+                # Index der ersten Kompetenz in der ComboBox finden
+                for i in range(first_combo.count()):
+                    if first_combo.itemData(i) == first_comp['id']:
+                        first_combo.setCurrentIndex(i)
+                        break
+            
+            # Weitere Kompetenzen in neue Reihen einfügen
+            for comp in competencies[1:]:  # Starte bei der zweiten Kompetenz
+                self.add_competency_row()  # Neue Reihe hinzufügen
+                # Die gerade hinzugefügte ComboBox holen (letzte Reihe)
+                row_layout = self.competencies_container.itemAt(self.competencies_container.count() - 1).layout()
+                combo = row_layout.itemAt(0).widget()
+                # Richtige Kompetenz auswählen
+                for i in range(combo.count()):
+                    if combo.itemData(i) == comp['id']:
+                        combo.setCurrentIndex(i)
+                        break
+                        
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                            f"Fehler beim Laden der Kompetenzen: {str(e)}")
         
         # Markiere abwesende Schüler
         try:
@@ -166,9 +242,8 @@ class LessonDetailsDialog(QDialog):
             return f"{base}-"
 
     def save_data(self):
-        """Speichert die Änderungen"""
         try:
-            # Bestehender Code für allgemeine Stundendaten...
+            # Bestehender Code für allgemeine Stundendaten
             self.main_window.db.update_lesson(
                 self.lesson_id,
                 {
@@ -176,8 +251,30 @@ class LessonDetailsDialog(QDialog):
                     'homework': self.homework.toPlainText().strip()
                 }
             )
+
+            # Kompetenzen der Stunde aktualisieren
+            # Zuerst alle bestehenden Verknüpfungen löschen
+            self.main_window.db.execute(
+                "DELETE FROM lesson_competencies WHERE lesson_id = ?",
+                (self.lesson_id,)
+            )
             
-            # Speichere Anwesenheit und Noten
+            # Neue Kompetenzen sammeln und speichern
+            for i in range(self.competencies_container.count()):
+                layout_item = self.competencies_container.itemAt(i)
+                if layout_item and layout_item.layout():
+                    row_layout = layout_item.layout()
+                    combo_item = row_layout.itemAt(0)
+                    if combo_item and combo_item.widget():
+                        combo = combo_item.widget()
+                        competency_id = combo.currentData()
+                        if competency_id:
+                            self.main_window.db.add_lesson_competency(
+                                self.lesson_id, 
+                                competency_id
+                            )
+
+            # Bestehender Code für Anwesenheit und Noten
             for row in range(self.students_table.rowCount()):
                 student_item = self.students_table.item(row, 0)
                 student_id = student_item.data(Qt.ItemDataRole.UserRole)
@@ -208,7 +305,7 @@ class LessonDetailsDialog(QDialog):
                         student_id=student_id,
                         lesson_id=self.lesson_id
                     )
-            
+                
             self.accept()
             
             # Liste aktualisieren
@@ -320,3 +417,92 @@ class LessonDetailsDialog(QDialog):
                 combo.blockSignals(True)
                 combo.setCurrentIndex(0)  # Setze zurück auf "keine Note"
                 combo.blockSignals(False)
+
+    # Neue Methode für das Hinzufügen einer Kompetenz-Zeile
+    def add_competency_row(self, is_first_row=False):
+        """Fügt eine neue Kompetenzauswahl-Zeile hinzu"""
+        row_layout = QHBoxLayout()
+        
+        # ComboBox für Kompetenzen
+        combo = QComboBox()
+        combo.currentIndexChanged.connect(lambda: self.check_duplicate_selection(combo))
+        self.load_competencies_for_subject(combo)
+        
+        row_layout.addWidget(combo)
+        
+        if not is_first_row:
+            remove_btn = QPushButton("-")
+            remove_btn.setMaximumWidth(30)
+            remove_btn.clicked.connect(lambda: self.remove_competency_row(row_layout))
+            row_layout.addWidget(remove_btn)
+        
+        self.competencies_container.addLayout(row_layout)
+
+
+    def on_competency_selected(self, changed_combo):
+        """Handler für Kompetenzauswahl"""
+        self.update_competency_combos(exclude_combo=changed_combo)
+
+    def remove_competency_row(self, row_layout):
+        # Entferne alle Widgets aus dem Layout
+        while row_layout.count():
+            item = row_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        
+        # Entferne das Layout selbst
+        self.competencies_container.removeItem(row_layout)
+        row_layout.deleteLater()
+        # Label nach dem Entfernen aktualisieren
+        self.update_competencies_label()
+
+    def load_competencies_for_subject(self, combo: QComboBox):
+        try:
+            subject = self.lesson.get('subject')
+            if subject:
+                combo.clear()
+                combo.addItem("", None)  # Leere Auswahl als erste Option
+                competencies = self.main_window.db.get_competencies_by_subject(subject)
+                for comp in competencies:
+                    display_text = f"{comp['area']}: {comp['description']}"
+                    combo.addItem(display_text, comp['id'])
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                            f"Fehler beim Laden der Kompetenzen: {str(e)}")
+
+    def check_duplicate_selection(self, changed_combo):
+        """Prüft ob die gewählte Kompetenz bereits ausgewählt ist"""
+        selected_id = changed_combo.currentData()
+        if not selected_id:  # Leere Auswahl ist immer okay
+            return
+            
+        # Prüfe alle anderen ComboBoxen
+        for i in range(self.competencies_container.count()):
+            layout_item = self.competencies_container.itemAt(i)
+            if layout_item and layout_item.layout():
+                combo = layout_item.layout().itemAt(0).widget()
+                if combo != changed_combo and combo.currentData() == selected_id:
+                    QMessageBox.warning(self, "Doppelte Auswahl", 
+                                    "Diese Kompetenz wurde bereits ausgewählt!")
+                    changed_combo.setCurrentIndex(0)  # Zurück zur leeren Auswahl
+                    return
+        # Label aktualisieren wenn keine Duplikate gefunden wurden
+        self.update_competencies_label()
+
+    def update_competencies_label(self):
+        """Aktualisiert das Label mit den ausgewählten Kompetenzen"""
+        selected_comps = []
+        for i in range(self.competencies_container.count()):
+            layout_item = self.competencies_container.itemAt(i)
+            if layout_item and layout_item.layout():
+                combo = layout_item.layout().itemAt(0).widget()
+                if combo.currentData():  # Wenn eine Kompetenz ausgewählt ist
+                    selected_comps.append(combo.currentText())
+        
+        if selected_comps:
+            text = "<b>Zu bewertende Kompetenzen:</b><br>" + "<br>".join(f"• {comp}" for comp in selected_comps)
+        else:
+            text = "<b>Keine Kompetenzen ausgewählt</b>"
+        
+        self.competencies_label.setText(text)
