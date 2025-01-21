@@ -3,6 +3,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 from src.views.settings.semester_settings import SemesterSettings
 from src.views.settings.timetable_settings import TimetableSettings
+from src.views.settings.grading_systems_settings import GradingSystemsSettings  
 
 class SettingsTab(QWidget):
     """Container-Widget für die verschiedenen Einstellungsbereiche"""
@@ -27,5 +28,11 @@ class SettingsTab(QWidget):
         # Stundenplan-Einstellungen
         self.timetable_settings = TimetableSettings(self.parent)
         self.settings_tabs.addTab(self.timetable_settings, "Stundenplan")
+
+        # Notensysteme
+        self.grading_systems = GradingSystemsSettings(self.parent)
+        self.settings_tabs.addTab(self.grading_systems, "Notensystem")
+
         
         layout.addWidget(self.settings_tabs)
+        layout.addStretch()
