@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 from src.views.settings.semester_settings import SemesterSettings
 from src.views.settings.timetable_settings import TimetableSettings
 from src.views.settings.grading_systems_settings import GradingSystemsSettings  
+from src.views.settings.assessment_templates_settings import AssessmentTemplatesSettings
 
 class SettingsTab(QWidget):
     """Container-Widget für die verschiedenen Einstellungsbereiche"""
@@ -33,6 +34,9 @@ class SettingsTab(QWidget):
         self.grading_systems = GradingSystemsSettings(self.parent)
         self.settings_tabs.addTab(self.grading_systems, "Notensystem")
 
-        
+         # Bewertungsvorlagen-Tab
+        self.templates_settings = AssessmentTemplatesSettings(self.parent)
+        self.settings_tabs.addTab(self.templates_settings, "Bewertungsvorlagen")
+
         layout.addWidget(self.settings_tabs)
         layout.addStretch()

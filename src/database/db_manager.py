@@ -204,13 +204,15 @@ class DatabaseManager:
             ''')
 
             # Beispiel-Notensysteme einfügen
-            cursor.execute('''
-                INSERT OR IGNORE INTO grading_systems 
-                (name, min_grade, max_grade, step_size, description)
-                VALUES 
-                ('Unterstufe (1-6)', 1.0, 6.0, 0.33, 'Klassisches Notensystem mit + und -'),
-                ('Oberstufe (0-15)', 0.0, 15.0, 1.0, 'Punktesystem der gymnasialen Oberstufe')
-            ''')
+            cursor.execute("SELECT COUNT(*) as count FROM grading_systems")
+            if cursor.fetchone()['count'] == 0:
+                cursor.execute('''
+                    INSERT INTO grading_systems 
+                    (name, min_grade, max_grade, step_size, description)
+                    VALUES 
+                    ('Unterstufe (1-6)', 1.0, 6.0, 0.33, 'Klassisches Notensystem mit + und -'),
+                    ('Oberstufe (0-15)', 0.0, 15.0, 1.0, 'Punktesystem der gymnasialen Oberstufe')
+                ''')
 
             # Vorlagen für Bewertungstypen
             cursor.execute('''
@@ -1802,4 +1804,55 @@ class DatabaseManager:
             )
             return [row['student_id'] for row in cursor.fetchall()]
         except Exception as e:
-            raise Exception(f"Fehler beim Laden der Abwesenheiten: {str(e)}")    
+            raise Exception(f"Fehler beim Laden der Abwesenheiten: {str(e)}")
+
+
+    def get_all_assessment_templates(self) -> list:
+        """Holt alle Bewertungsvorlagen mit zugehörigen Notensystemen."""
+        cursor = self.execute(
+            """SELECT t.*, g.name as grading_system_name
+            FROM assessment_type_templates t
+            JOIN grading_systems g ON t.grading_system_id = g.id
+            ORDER BY t.subject, t.name"""
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_assessment_template(self, template_id: int) -> dict:
+        """Holt eine einzelne Vorlage."""
+        cursor = self.execute(
+            """SELECT t.*, g.name as grading_system_name 
+            FROM assessment_type_templates t
+            JOIN grading_systems g ON t.grading_system_id = g.id
+            WHERE t.id = ?""",
+            (template_id,)
+        )
+        result = cursor.fetchone()
+        return dict(result) if result else None
+
+    def add_assessment_template(self, name: str, subject: str, 
+                            grading_system_id: int, description: str = None) -> int:
+        """Fügt eine neue Vorlage hinzu."""
+        cursor = self.execute(
+            """INSERT INTO assessment_type_templates 
+            (name, subject, grading_system_id, description)
+            VALUES (?, ?, ?, ?)""",
+            (name, subject, grading_system_id, description)
+        )
+        return cursor.lastrowid
+
+    def update_assessment_template(self, template_id: int, name: str, subject: str,
+                                grading_system_id: int, description: str = None) -> None:
+        """Aktualisiert eine bestehende Vorlage."""
+        self.execute(
+            """UPDATE assessment_type_templates 
+            SET name = ?, subject = ?, grading_system_id = ?, description = ?
+            WHERE id = ?""",
+            (name, subject, grading_system_id, description, template_id)
+        )
+
+    def delete_assessment_template(self, template_id: int) -> None:
+        """Löscht eine Vorlage und alle ihre Items."""
+        self.execute(
+            "DELETE FROM assessment_type_templates WHERE id = ?",
+            (template_id,)
+        )
