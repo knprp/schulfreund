@@ -1403,6 +1403,35 @@ class DatabaseManager:
         except Exception as e:
             raise Exception(f"Fehler beim Abrufen der Bewertungstypen: {str(e)}")
 
+    def delete_assessment_type(self, type_id: int) -> None:
+        """Löscht einen Bewertungstyp und alle zugehörigen Untertypen.
+        
+        Args:
+            type_id: ID des zu löschenden Bewertungstyps
+        """
+        try:
+            # Prüfe ob der Typ bereits für Bewertungen verwendet wurde
+            cursor = self.execute(
+                "SELECT COUNT(*) as count FROM assessments WHERE assessment_type_id = ?",
+                (type_id,)
+            )
+            result = cursor.fetchone()
+            if result['count'] > 0:
+                raise ValueError(
+                    "Dieser Bewertungstyp wurde bereits für Noten verwendet und "
+                    "kann nicht gelöscht werden."
+                )
+
+            # Lösche rekursiv alle untergeordneten Typen
+            # Dies funktioniert dank ON DELETE CASCADE in der Datenbank
+            self.execute(
+                "DELETE FROM assessment_types WHERE id = ?",
+                (type_id,)
+            )
+            
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen des Bewertungstyps: {str(e)}")
+
 # Neue Methoden für die Verwaltung von Assessments (Noten):
 
 # In db_manager.py

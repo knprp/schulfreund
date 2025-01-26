@@ -1,13 +1,17 @@
 # src/views/dialogs/course_dialog.py
 
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QLineEdit, QHBoxLayout,
-                           QComboBox, QDialogButtonBox, QPushButton, QColorDialog,
-                           QMessageBox, QFileDialog)
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+                           QLineEdit, QDialogButtonBox, QPushButton,
+                           QListWidget, QListWidgetItem, QComboBox,
+                           QColorDialog, QMessageBox, QFileDialog)
 from PyQt6.QtGui import QColor
+from PyQt6.QtCore import Qt
+
 from src.models.course import Course
 from src.models.student import Student
 from src.views.dialogs.import_csv_students_dialog import ImportCsvStudentsDialog
-
+from src.views.dialogs.import_students_dialog import ImportStudentsDialog
+from src.views.dialogs.grading_system_dialog import GradingSystemDialog
 
 class CourseDialog(QDialog):
     def __init__(self, parent=None, course=None):
@@ -15,25 +19,27 @@ class CourseDialog(QDialog):
         self.parent = parent
         self.course = course
         self.db = parent.parent.db
-        self.selected_student_ids = []  # Neue Variable für Import
-        self.setWindowTitle("Kurs hinzufügen" if not course else "Kurs bearbeiten")
+        self.selected_student_ids = []
         self.color = QColor('#FFFFFF')
+        
+        self.setWindowTitle("Kurs bearbeiten" if course else "Kurs hinzufügen")
+        self.setMinimumWidth(600)
         self.setup_ui()
 
-        
         if course:
             self.load_course_data()
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
+        # Basis Informationen
         # Name
-        layout.addWidget(QLabel("Name:"))
+        layout.addWidget(QLabel("Name:*"))
         self.name = QLineEdit()
         layout.addWidget(self.name)
 
         # Typ
-        layout.addWidget(QLabel("Typ:"))
+        layout.addWidget(QLabel("Typ:*"))
         self.type = QComboBox()
         self.type.addItems(["Klasse", "Kurs"])
         layout.addWidget(self.type)
@@ -42,9 +48,10 @@ class CourseDialog(QDialog):
         layout.addWidget(QLabel("Fach:"))
         self.subject = QComboBox()
         self.subject.setEditable(True)
-        self.subject.addItems(["Mathematik", "Deutsch", "Englisch", "Geschichte"])
+        self.subject.addItems(["Mathematik", "Deutsch", "Englisch", "Geschichte", 
+                             "Biologie", "Chemie", "Physik", "Informatik"])
+        self.subject.currentTextChanged.connect(self.on_subject_changed)
         layout.addWidget(self.subject)
-        self.subject.currentTextChanged.connect(self.load_templates)
 
         # Beschreibung
         layout.addWidget(QLabel("Beschreibung:"))
@@ -59,9 +66,28 @@ class CourseDialog(QDialog):
         self.update_color_button()
         self.color_button.clicked.connect(self.choose_color)
         color_layout.addWidget(self.color_button)
+        color_layout.addStretch()
         layout.addLayout(color_layout)
 
-        # Import-Buttons nebeneinander
+        # Bewertungssystem
+        assessment_layout = QVBoxLayout()
+        assessment_layout.addWidget(QLabel("Bewertungssystem:"))
+        
+        # Template-Auswahl und Bearbeiten-Button
+        template_layout = QHBoxLayout()
+        self.template = QComboBox()
+        self.load_templates()  # Initial laden
+        template_layout.addWidget(self.template)
+        
+        self.edit_types_btn = QPushButton("Bewertungstypen bearbeiten")
+        self.edit_types_btn.setEnabled(False)  # Initial deaktiviert
+        self.edit_types_btn.clicked.connect(self.edit_assessment_types)
+        template_layout.addWidget(self.edit_types_btn)
+        
+        assessment_layout.addLayout(template_layout)
+        layout.addLayout(assessment_layout)
+
+        # Schüler Import
         import_layout = QHBoxLayout()
         
         import_csv_btn = QPushButton("Schüler aus CSV importieren")
@@ -74,41 +100,101 @@ class CourseDialog(QDialog):
         
         layout.addLayout(import_layout)
 
-        # Vor den Dialog-Buttons:
-        # Template-Auswahl
-        template_layout = QHBoxLayout()
-        template_layout.addWidget(QLabel("Bewertungsvorlage:"))
-        self.template = QComboBox()
-        self.load_templates()
-        template_layout.addWidget(self.template)
-        layout.addLayout(template_layout)
+        # Importierte Schüler anzeigen
+        layout.addWidget(QLabel("Ausgewählte Schüler:"))
+        self.student_list = QListWidget()
+        self.student_list.setMaximumHeight(150)
+        layout.addWidget(self.student_list)
 
+        # Buttons
+        button_box = QDialogButtonBox()
+        
+        if not self.course:  # Nur beim Erstellen
+            save_new_btn = QPushButton("Speichern && Neu")
+            save_new_btn.clicked.connect(self.save_and_new)
+            button_box.addButton(save_new_btn, QDialogButtonBox.ButtonRole.ActionRole)
 
+        button_box.addButton(QDialogButtonBox.StandardButton.Ok)
+        button_box.addButton(QDialogButtonBox.StandardButton.Cancel)
+        
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
 
-        # Button Box erstellen aber NICHT verbinden
-        self.button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        layout.addWidget(self.button_box)
-
-        # Nach Setup die Signale verbinden
-        self.setup_signals()
-
-    def setup_signals(self):
-        """Verbindet alle Signale nach dem Setup"""
-        self.button_box.accepted.connect(self.accept)  # Jetzt die überschriebene accept() Methode
-        self.button_box.rejected.connect(self.reject)
+        # Pflichtfeld Hinweis
+        layout.addWidget(QLabel("* Pflichtfeld"))
 
     def load_course_data(self):
+        """Lädt die Daten eines existierenden Kurses"""
         self.name.setText(self.course.name)
         self.type.setCurrentText("Klasse" if self.course.type == 'class' else "Kurs")
+        
         if self.course.subject:
-            self.subject.setCurrentText(self.course.subject)
+            idx = self.subject.findText(self.course.subject)
+            if idx >= 0:
+                self.subject.setCurrentIndex(idx)
+            else:
+                self.subject.addItem(self.course.subject)
+                self.subject.setCurrentText(self.course.subject)
+                
         self.description.setText(self.course.description or "")
+        
         if self.course.color:
             self.color = QColor(self.course.color)
             self.update_color_button()
+
+        # Aktiviere Bearbeiten-Button
+        self.edit_types_btn.setEnabled(True)
+
+        # Lade aktuelle Schüler
+        self.load_current_students()
+
+    def load_current_students(self):
+        """Lädt die aktuellen Schüler des Kurses in die Liste"""
+        try:
+            # Hole aktuelles Semester
+            semester = self.db.get_semester_dates()
+            if not semester:
+                return
+                
+            # Hole semester_id aus der Historie
+            current_semester = self.db.get_semester_by_date(semester['semester_start'])
+            if not current_semester:
+                return
+                
+            # Hole Schüler
+            students = self.db.get_students_by_course(self.course.id, current_semester['id'])
+            
+            # Aktualisiere Liste
+            self.student_list.clear()
+            for student in students:
+                item = QListWidgetItem(f"{student['last_name']}, {student['first_name']}")
+                item.setData(Qt.ItemDataRole.UserRole, student['id'])
+                self.student_list.addItem(item)
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                               f"Fehler beim Laden der Schüler: {str(e)}")
+
+    def on_subject_changed(self, subject):
+        """Handler für Änderungen am Fach"""
+        self.load_templates()
+
+    def load_templates(self):
+        """Lädt die verfügbaren Bewertungsvorlagen für das aktuelle Fach"""
+        try:
+            self.template.clear()
+            self.template.addItem("Keine Vorlage", None)
+            
+            subject = self.subject.currentText()
+            if subject:
+                templates = self.db.get_templates_by_subject(subject)
+                for template in templates:
+                    self.template.addItem(template['name'], template['id'])
+                    
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                               f"Fehler beim Laden der Vorlagen: {str(e)}")
 
     def update_color_button(self):
         """Aktualisiert die Farbe des Buttons"""
@@ -123,56 +209,74 @@ class CourseDialog(QDialog):
             self.color = color
             self.update_color_button()
 
-    def get_data(self):
-        data = {
-            'name': self.name.text().strip(),
-            'type': 'class' if self.type.currentText() == "Klasse" else 'course',
-            'subject': self.subject.currentText().strip() or None,
-            'description': self.description.text().strip() or None,
-            'color': self.color.name()  # Speichere die Farbe als HTML-Code
-        }
-        return data
-
-    def import_existing_students(self):
-        """Öffnet den Import-Dialog für Schüler"""
-        from src.views.dialogs.import_students_dialog import ImportStudentsDialog
-        try:
-            window = self.parent.parent
-            dialog = ImportStudentsDialog(window)
-            if dialog.exec():
-                # Nur IDs speichern, Import erfolgt später
-                self.selected_student_ids = dialog.get_selected_students()
-                
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler", 
-                            f"Fehler beim Importieren der Schüler: {str(e)}")
-
     def import_from_csv(self):
+        """Importiert Schüler aus einer CSV-Datei"""
         if not self.course:
             QMessageBox.warning(self, "Fehler", "Bitte speichern Sie den Kurs zuerst")
             return
             
         filepath, _ = QFileDialog.getOpenFileName(
             self, "CSV-Datei auswählen", "", "CSV Dateien (*.csv)")
+            
         if filepath:
             dialog = ImportCsvStudentsDialog(self, self.db)
             dialog.load_csv_data(filepath)
             if dialog.exec():
-                self.parent.refresh_courses()  # Aktualisiere die Kurstabelle
-                QMessageBox.information(self, "Erfolg", "Die Schüler wurden erfolgreich importiert")
+                self.load_current_students()
+                QMessageBox.information(self, "Erfolg", 
+                                      "Die Schüler wurden erfolgreich importiert")
 
+    def import_existing_students(self):
+        """Öffnet den Dialog zum Importieren existierender Schüler"""
+        try:
+            dialog = ImportStudentsDialog(self.parent.parent)
+            if dialog.exec():
+                self.selected_student_ids = dialog.get_selected_students()
+                self.update_student_list()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                               f"Fehler beim Importieren der Schüler: {str(e)}")
+
+    def update_student_list(self):
+        """Aktualisiert die Anzeige der ausgewählten Schüler"""
+        try:
+            self.student_list.clear()
+            for student_id in self.selected_student_ids:
+                student = Student.get_by_id(self.db, student_id)
+                if student:
+                    item = QListWidgetItem(f"{student.last_name}, {student.first_name}")
+                    item.setData(Qt.ItemDataRole.UserRole, student_id)
+                    self.student_list.addItem(item)
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                               f"Fehler beim Aktualisieren der Liste: {str(e)}")
+
+    def edit_assessment_types(self):
+        """Öffnet den Dialog zum Bearbeiten der Bewertungstypen"""
+        if not self.course:
+            QMessageBox.warning(self, "Fehler", 
+                              "Bitte speichern Sie den Kurs zuerst")
+            return
+            
+        dialog = GradingSystemDialog(self, course_id=self.course.id)
+        dialog.exec()
 
     def accept(self):
-        """Überschreibt die Standard accept() Methode"""
-        print("Accept wurde aufgerufen")  # DEBUG 
+        """Validiert die Eingaben und speichert den Kurs"""
         try:
-            window = self.parent.parent
-            print("Starte Speichern des Kurses")  # DEBUG
+            # Validierung
+            name = self.name.text().strip()
+            if not name:
+                QMessageBox.warning(self, "Fehler", "Bitte geben Sie einen Namen ein")
+                self.name.setFocus()
+                return
 
-            # 1. Kurs speichern/aktualisieren
+            window = self.parent.parent
             data = self.get_data()
+            
             if self.course:
-                print("Aktualisiere existierenden Kurs")  # DEBUG
+                # Update
                 self.course.name = data['name']
                 self.course.type = data['type']
                 self.course.subject = data['subject']
@@ -181,43 +285,45 @@ class CourseDialog(QDialog):
                 self.course.update(window.db)
                 course_id = self.course.id
             else:
-                print("Erstelle neuen Kurs mit Daten:", data)  # DEBUG
+                # Neu
                 course = Course.create(window.db, **data)
                 course_id = course.id
+                self.course = course
 
-            # 2. Schüler importieren
+            # Button aktivieren
+            self.edit_types_btn.setEnabled(True)
+
+            # Schüler verarbeiten
             semester_dates = window.db.get_semester_dates()
             if self.selected_student_ids and semester_dates:
-                # Hole das aktive Semester aus der Historie
-                current_semester = window.db.get_semester_by_date(semester_dates['semester_start'])
+                current_semester = window.db.get_semester_by_date(
+                    semester_dates['semester_start'])
+                    
                 if current_semester:
-                    print(f"Aktuelles Semester gefunden: {current_semester}")  # DEBUG
                     for student_id in self.selected_student_ids:
                         student = Student.get_by_id(window.db, student_id)
                         if student:
-                            student.add_course(window.db, course_id, current_semester['id'])
+                            student.add_course(window.db, course_id, 
+                                            current_semester['id'])
 
-            print("Rufe super().accept() auf")  # DEBUG
-            super().accept()
+            # Aktualisiere die UI des Hauptfensters
+            if hasattr(self.parent, 'refresh_courses'):
+                self.parent.refresh_courses()
+
+            super().accept()  # Schließe den Dialog
 
         except Exception as e:
-            print(f"Fehler aufgetreten: {e}")  # DEBUG
             QMessageBox.critical(self, "Fehler", str(e))
 
-    def load_templates(self):
-        """Lädt alle Bewertungsvorlagen für das aktuelle Fach"""
-        try:
-            templates = self.db.get_templates_by_subject(self.subject.currentText())
-            self.template.clear()
-            self.template.addItem("Keine Vorlage", None)
-            for template in templates:
-                self.template.addItem(template['name'], template['id'])
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Vorlagen: {str(e)}")
+    def save_and_new(self):
+        """Speichert den aktuellen Kurs und öffnet einen neuen Dialog"""
+        self.accept()
+        dialog = CourseDialog(self.parent)
+        dialog.exec()
 
     def get_data(self):
         """Gibt die eingegebenen Daten zurück"""
-        data = {
+        return {
             'name': self.name.text().strip(),
             'type': 'class' if self.type.currentText() == "Klasse" else 'course',
             'subject': self.subject.currentText().strip() or None,
@@ -225,4 +331,3 @@ class CourseDialog(QDialog):
             'color': self.color.name(),
             'template_id': self.template.currentData()
         }
-        return data
