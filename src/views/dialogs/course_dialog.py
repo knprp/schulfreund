@@ -44,6 +44,7 @@ class CourseDialog(QDialog):
         self.subject.setEditable(True)
         self.subject.addItems(["Mathematik", "Deutsch", "Englisch", "Geschichte"])
         layout.addWidget(self.subject)
+        self.subject.currentTextChanged.connect(self.load_templates)
 
         # Beschreibung
         layout.addWidget(QLabel("Beschreibung:"))
@@ -72,6 +73,16 @@ class CourseDialog(QDialog):
         import_layout.addWidget(import_existing_btn)
         
         layout.addLayout(import_layout)
+
+        # Vor den Dialog-Buttons:
+        # Template-Auswahl
+        template_layout = QHBoxLayout()
+        template_layout.addWidget(QLabel("Bewertungsvorlage:"))
+        self.template = QComboBox()
+        self.load_templates()
+        template_layout.addWidget(self.template)
+        layout.addLayout(template_layout)
+
 
 
         # Button Box erstellen aber NICHT verbinden
@@ -192,3 +203,26 @@ class CourseDialog(QDialog):
         except Exception as e:
             print(f"Fehler aufgetreten: {e}")  # DEBUG
             QMessageBox.critical(self, "Fehler", str(e))
+
+    def load_templates(self):
+        """Lädt alle Bewertungsvorlagen für das aktuelle Fach"""
+        try:
+            templates = self.db.get_templates_by_subject(self.subject.currentText())
+            self.template.clear()
+            self.template.addItem("Keine Vorlage", None)
+            for template in templates:
+                self.template.addItem(template['name'], template['id'])
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Vorlagen: {str(e)}")
+
+    def get_data(self):
+        """Gibt die eingegebenen Daten zurück"""
+        data = {
+            'name': self.name.text().strip(),
+            'type': 'class' if self.type.currentText() == "Klasse" else 'course',
+            'subject': self.subject.currentText().strip() or None,
+            'description': self.description.text().strip() or None,
+            'color': self.color.name(),
+            'template_id': self.template.currentData()
+        }
+        return data
