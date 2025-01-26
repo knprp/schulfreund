@@ -16,19 +16,21 @@ class Course:
 
     @staticmethod
     def create(db, name: str, type: str = "course", subject: Optional[str] = None,
-            description: Optional[str] = None, color: Optional[str] = None) -> 'Course':
+            description: Optional[str] = None, color: Optional[str] = None, 
+            template_id: Optional[int] = None) -> 'Course':
         """Erstellt einen neuen Kurs in der Datenbank."""
-        if not name or not name.strip():
-            raise ValueError("Der Name darf nicht leer sein")
-        if type not in ["class", "course"]:
-            raise ValueError("Typ muss 'class' oder 'course' sein")
-            
         cursor = db.execute(
             """INSERT INTO courses (name, type, subject, description, color) 
             VALUES (?, ?, ?, ?, ?)""",
             (name.strip(), type, subject, description, color)
         )
-        return Course(cursor.lastrowid, name, type, subject, description, color)
+        course_id = cursor.lastrowid
+
+        # Wenn Template ausgewählt wurde, Bewertungstypen erstellen
+        if template_id:
+            db.create_assessment_types_from_template(course_id, template_id)
+
+        return Course(course_id, name, type, subject, description, color)
 
     @staticmethod
     def get_by_id(db, course_id: int) -> Optional['Course']:
