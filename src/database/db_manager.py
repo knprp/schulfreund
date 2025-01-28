@@ -538,29 +538,29 @@ class DatabaseManager:
             raise Exception(f"Fehler beim Abrufen der Kompetenzen: {e}")
 
     # Noten-bezogene Methoden
-    def add_grade(self, student_id: int, lesson_id: int, 
-                 competency_id: int, grade: int, comment: str = "") -> int:
-        """Fügt eine neue Note hinzu."""
-        cursor = self.execute(
-            """INSERT INTO grades 
-               (student_id, lesson_id, competency_id, grade, comment)
-               VALUES (?, ?, ?, ?, ?)""",
-            (student_id, lesson_id, competency_id, grade, comment)
-        )
-        return cursor.lastrowid
+    # def add_grade(self, student_id: int, lesson_id: int, 
+    #              competency_id: int, grade: int, comment: str = "") -> int:
+    #     """Fügt eine neue Note hinzu."""
+    #     cursor = self.execute(
+    #         """INSERT INTO grades 
+    #            (student_id, lesson_id, competency_id, grade, comment)
+    #            VALUES (?, ?, ?, ?, ?)""",
+    #         (student_id, lesson_id, competency_id, grade, comment)
+    #     )
+    #     return cursor.lastrowid
 
-    def get_grades_by_student(self, student_id: int) -> List[Dict[str, Any]]:
-        """Holt alle Noten eines Schülers mit zugehörigen Informationen."""
-        cursor = self.execute(
-            """SELECT g.*, l.subject, l.date, c.area, c.description
-               FROM grades g
-               JOIN lessons l ON g.lesson_id = l.id
-               JOIN competencies c ON g.competency_id = c.id
-               WHERE g.student_id = ?
-               ORDER BY l.date DESC""",
-            (student_id,)
-        )
-        return [dict(row) for row in cursor.fetchall()]
+    # def get_grades_by_student(self, student_id: int) -> List[Dict[str, Any]]:
+    #     """Holt alle Noten eines Schülers mit zugehörigen Informationen."""
+    #     cursor = self.execute(
+    #         """SELECT g.*, l.subject, l.date, c.area, c.description
+    #            FROM grades g
+    #            JOIN lessons l ON g.lesson_id = l.id
+    #            JOIN competencies c ON g.competency_id = c.id
+    #            WHERE g.student_id = ?
+    #            ORDER BY l.date DESC""",
+    #         (student_id,)
+    #     )
+    #     return [dict(row) for row in cursor.fetchall()]
 
     # Einstellungs-bezogene Methoden
     def save_semester_dates(self, start_date: str, end_date: str) -> None:
@@ -605,26 +605,26 @@ class DatabaseManager:
         if self.conn:
             self.conn.close()
 
-    def add_grade(self, data: dict) -> int:
-        """Fügt eine neue Note hinzu mit erweiterten Eigenschaften."""
-        try:
-            cursor = self.execute('''
-                INSERT INTO grades (
-                    student_id, lesson_id, competency_id, 
-                    grade, grade_type, weight, comment
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                data['student_id'], 
-                data['lesson_id'],
-                data['competency_id'],
-                data['grade'],
-                data.get('grade_type', 'regular'),
-                data.get('weight', 1.0),
-                data.get('comment', '')
-            ))
-            return cursor.lastrowid
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Hinzufügen der Note: {e}")
+    # def add_grade(self, data: dict) -> int:
+    #     """Fügt eine neue Note hinzu mit erweiterten Eigenschaften."""
+    #     try:
+    #         cursor = self.execute('''
+    #             INSERT INTO grades (
+    #                 student_id, lesson_id, competency_id, 
+    #                 grade, grade_type, weight, comment
+    #             ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    #         ''', (
+    #             data['student_id'], 
+    #             data['lesson_id'],
+    #             data['competency_id'],
+    #             data['grade'],
+    #             data.get('grade_type', 'regular'),
+    #             data.get('weight', 1.0),
+    #             data.get('comment', '')
+    #         ))
+    #         return cursor.lastrowid
+    #     except sqlite3.Error as e:
+    #         raise Exception(f"Fehler beim Hinzufügen der Note: {e}")
 
     def get_student_grades(self, student_id: int, timeframe: str = None) -> list:
         """Holt alle Noten eines Schülers mit optionalem Zeitrahmen."""
@@ -654,69 +654,69 @@ class DatabaseManager:
         except sqlite3.Error as e:
             raise Exception(f"Fehler beim Abrufen der Noten: {e}")
 
-    def get_grade_statistics(self, student_id: int) -> dict:
-        """Berechnet Notenstatistiken für einen Schüler."""
-        try:
-            cursor = self.execute('''
-                SELECT 
-                    l.subject,
-                    COUNT(*) as count,
-                    AVG(g.grade * g.weight) as weighted_average,
-                    MIN(g.grade) as best_grade,
-                    MAX(g.grade) as worst_grade
-                FROM grades g
-                JOIN lessons l ON g.lesson_id = l.id
-                WHERE g.student_id = ?
-                GROUP BY l.subject
-            ''', (student_id,))
+    # def get_grade_statistics(self, student_id: int) -> dict:
+    #     """Berechnet Notenstatistiken für einen Schüler."""
+    #     try:
+    #         cursor = self.execute('''
+    #             SELECT 
+    #                 l.subject,
+    #                 COUNT(*) as count,
+    #                 AVG(g.grade * g.weight) as weighted_average,
+    #                 MIN(g.grade) as best_grade,
+    #                 MAX(g.grade) as worst_grade
+    #             FROM grades g
+    #             JOIN lessons l ON g.lesson_id = l.id
+    #             WHERE g.student_id = ?
+    #             GROUP BY l.subject
+    #         ''', (student_id,))
             
-            return {row['subject']: dict(row) for row in cursor.fetchall()}
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Berechnen der Statistiken: {e}")
+    #         return {row['subject']: dict(row) for row in cursor.fetchall()}
+    #     except sqlite3.Error as e:
+    #         raise Exception(f"Fehler beim Berechnen der Statistiken: {e}")
 
-    def update_grade(self, grade_id: int, data: dict) -> None:
-        """Aktualisiert eine bestehende Note."""
-        try:
-            fields = []
-            values = []
-            for key, value in data.items():
-                if key not in ['id', 'created_at']:
-                    fields.append(f"{key} = ?")
-                    values.append(value)
+    # def update_grade(self, grade_id: int, data: dict) -> None:
+    #     """Aktualisiert eine bestehende Note."""
+    #     try:
+    #         fields = []
+    #         values = []
+    #         for key, value in data.items():
+    #             if key not in ['id', 'created_at']:
+    #                 fields.append(f"{key} = ?")
+    #                 values.append(value)
             
-            values.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))  # updated_at
-            values.append(grade_id)  # WHERE id = ?
+    #         values.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))  # updated_at
+    #         values.append(grade_id)  # WHERE id = ?
             
-            query = f'''
-                UPDATE grades 
-                SET {', '.join(fields)}, updated_at = ?
-                WHERE id = ?
-            '''
+    #         query = f'''
+    #             UPDATE grades 
+    #             SET {', '.join(fields)}, updated_at = ?
+    #             WHERE id = ?
+    #         '''
             
-            self.execute(query, tuple(values))
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Aktualisieren der Note: {e}")
+    #         self.execute(query, tuple(values))
+    #     except sqlite3.Error as e:
+    #         raise Exception(f"Fehler beim Aktualisieren der Note: {e}")
 
-    def get_grade(self, grade_id: int) -> dict:
-        """Holt eine einzelne Note mit allen Details."""
-        try:
-            cursor = self.execute('''
-                SELECT 
-                    g.*,
-                    l.date as lesson_date,
-                    l.subject,
-                    c.area as competency_area,
-                    c.description as competency_description
-                FROM grades g
-                JOIN lessons l ON g.lesson_id = l.id
-                JOIN competencies c ON g.competency_id = c.id
-                WHERE g.id = ?
-            ''', (grade_id,))
+    # def get_grade(self, grade_id: int) -> dict:
+    #     """Holt eine einzelne Note mit allen Details."""
+    #     try:
+    #         cursor = self.execute('''
+    #             SELECT 
+    #                 g.*,
+    #                 l.date as lesson_date,
+    #                 l.subject,
+    #                 c.area as competency_area,
+    #                 c.description as competency_description
+    #             FROM grades g
+    #             JOIN lessons l ON g.lesson_id = l.id
+    #             JOIN competencies c ON g.competency_id = c.id
+    #             WHERE g.id = ?
+    #         ''', (grade_id,))
             
-            result = cursor.fetchone()
-            return dict(result) if result else None
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Abrufen der Note: {e}")
+    #         result = cursor.fetchone()
+    #         return dict(result) if result else None
+    #     except sqlite3.Error as e:
+    #         raise Exception(f"Fehler beim Abrufen der Note: {e}")
 
     def add_lesson_competency(self, lesson_id: int, competency_id: int) -> None:
         """Fügt eine Verknüpfung zwischen Unterrichtsstunde und Kompetenz hinzu."""
