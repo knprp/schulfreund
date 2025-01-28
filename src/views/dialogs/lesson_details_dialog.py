@@ -155,77 +155,116 @@ class LessonDetailsDialog(QDialog):
 
     def load_data(self):
         """Lädt die Daten der Stunde in den Dialog"""
-        self.topic.setText(self.lesson.get('topic', ''))
-        self.homework.setText(self.lesson.get('homework', ''))
-        
-        # Lade Schüler und deren Anwesenheit
-        self.load_students()
-
-        self.topic.setText(self.lesson.get('topic', ''))
-        self.homework.setText(self.lesson.get('homework', ''))
-        
-        # Kompetenzen laden
         try:
-            # Alle bestehenden Kompetenz-Reihen entfernen (außer der ersten)
-            while self.competencies_container.count() > 1:
-                layout_item = self.competencies_container.takeAt(self.competencies_container.count() - 1)
-                if layout_item and layout_item.layout():
-                    self.remove_competency_row(layout_item.layout())
+            print("DEBUG Load - Starting load_data()") 
+            
+            # Grundlegende Stundendaten
+            self.topic.setText(self.lesson.get('topic', ''))
+            self.homework.setText(self.lesson.get('homework', ''))
+            
+            # Lade Schüler (ohne Anwesenheitsstatus)
+            self.load_students()
+            
+            # Kompetenzen laden
+            try:
+                # Alle bestehenden Kompetenz-Reihen entfernen (außer der ersten)
+                while self.competencies_container.count() > 1:
+                    layout_item = self.competencies_container.takeAt(self.competencies_container.count() - 1)
+                    if layout_item and layout_item.layout():
+                        self.remove_competency_row(layout_item.layout())
 
-            # Kompetenzen der Stunde laden
-            cursor = self.main_window.db.execute(
-                """SELECT c.* FROM competencies c
-                JOIN lesson_competencies lc ON c.id = lc.competency_id
-                WHERE lc.lesson_id = ?
-                ORDER BY c.area, c.description""",
-                (self.lesson_id,)
-            )
-            competencies = cursor.fetchall()
-            
-            # Erste ComboBox aktualisieren/befüllen wenn Kompetenzen vorhanden
-            if competencies:
-                first_comp = competencies[0]
-                first_combo = self.competencies_container.itemAt(0).layout().itemAt(0).widget()
-                # Index der ersten Kompetenz in der ComboBox finden
-                for i in range(first_combo.count()):
-                    if first_combo.itemData(i) == first_comp['id']:
-                        first_combo.setCurrentIndex(i)
-                        break
-            
-            # Weitere Kompetenzen in neue Reihen einfügen
-            for comp in competencies[1:]:  # Starte bei der zweiten Kompetenz
-                self.add_competency_row()  # Neue Reihe hinzufügen
-                # Die gerade hinzugefügte ComboBox holen (letzte Reihe)
-                row_layout = self.competencies_container.itemAt(self.competencies_container.count() - 1).layout()
-                combo = row_layout.itemAt(0).widget()
-                # Richtige Kompetenz auswählen
-                for i in range(combo.count()):
-                    if combo.itemData(i) == comp['id']:
-                        combo.setCurrentIndex(i)
-                        break
-            # Prüfe ob es Noten gibt und hole die erste für Typ/Namen
-            cursor = self.main_window.db.execute(
-                """SELECT DISTINCT a.assessment_type_id, a.topic 
-                FROM assessments a
-                WHERE a.lesson_id = ? 
-                LIMIT 1""",
-                (self.lesson_id,)
-            )
-            assessment = cursor.fetchone()
-            if assessment:
-                # Setze Bewertungstyp
-                type_idx = self.assessment_type.findData(assessment['assessment_type_id'])
-                if type_idx >= 0:
-                    self.assessment_type.setCurrentIndex(type_idx)
+                # Kompetenzen der Stunde laden
+                cursor = self.main_window.db.execute(
+                    """SELECT c.* FROM competencies c
+                    JOIN lesson_competencies lc ON c.id = lc.competency_id
+                    WHERE lc.lesson_id = ?
+                    ORDER BY c.area, c.description""",
+                    (self.lesson_id,)
+                )
+                competencies = cursor.fetchall()
+                
+                # Erste ComboBox aktualisieren/befüllen wenn Kompetenzen vorhanden
+                if competencies:
+                    first_comp = competencies[0]
+                    first_combo = self.competencies_container.itemAt(0).layout().itemAt(0).widget()
+                    for i in range(first_combo.count()):
+                        if first_combo.itemData(i) == first_comp['id']:
+                            first_combo.setCurrentIndex(i)
+                            break
+                
+                # Weitere Kompetenzen in neue Reihen einfügen
+                for comp in competencies[1:]:
+                    self.add_competency_row()
+                    row_layout = self.competencies_container.itemAt(self.competencies_container.count() - 1).layout()
+                    combo = row_layout.itemAt(0).widget()
+                    for i in range(combo.count()):
+                        if combo.itemData(i) == comp['id']:
+                            combo.setCurrentIndex(i)
+                            break
+
+                # Lade und setze Anwesenheitsdaten
+                self.load_attendance_data()
+
+                # Assessment Type Info laden
+                self.load_assessment_data()
                     
-                # Setze Namen/Bezeichnung
-                if assessment['topic']:
-                    self.assessment_name.setText(assessment['topic'])
+            except Exception as e:
+                print(f"DEBUG Load - Error loading competencies: {str(e)}")
+                raise
 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Daten: {str(e)}")
-        
-        # Markiere abwesende Schüler
+
+    def load_students(self):
+        """Lädt die Schüler des Kurses in die Tabelle (ohne Anwesenheitsstatus)"""
+        try:
+            semester = self.main_window.db.get_semester_dates()
+            if not semester:
+                raise ValueError("Kein aktives Semester gefunden")
+
+            # Hole semester_id aus der Historie
+            cursor = self.main_window.db.execute(
+                """SELECT id FROM semester_history 
+                WHERE start_date = ? AND end_date = ?""",
+                (semester['semester_start'], semester['semester_end'])
+            )
+            semester_result = cursor.fetchone()
+            if not semester_result:
+                raise ValueError("Aktives Semester nicht in der Historie gefunden")
+
+            # Hole alle Schüler des Kurses für das aktuelle Semester
+            students = self.main_window.db.get_students_by_course(
+                self.lesson['course_id'], 
+                semester_result['id']
+            )
+
+            # Fülle die Tabelle
+            self.students_table.setRowCount(len(students))
+            for row, student in enumerate(students):
+                # Name
+                name_item = QTableWidgetItem(f"{student['last_name']}, {student['first_name']}")
+                name_item.setData(Qt.ItemDataRole.UserRole, student['id'])
+                self.students_table.setItem(row, self.COLUMN_NAME, name_item)
+                
+                # Anwesenheit (neutral initialisiert)
+                attendance = QCheckBox()
+                self.students_table.setCellWidget(row, self.COLUMN_ATTENDANCE, attendance)
+                
+                # Note
+                grade_combo = QComboBox()
+                self.setup_grade_combo(grade_combo)
+                grade_combo.setEnabled(True)
+                self.students_table.setCellWidget(row, self.COLUMN_GRADE, grade_combo)
+                
+                # Bemerkung
+                remark = QLineEdit()
+                self.students_table.setCellWidget(row, self.COLUMN_REMARK, remark)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Schüler: {str(e)}")
+
+    def load_attendance_data(self):
+        """Lädt und setzt die Anwesenheitsdaten für alle Schüler"""
         try:
             absent_students = self.main_window.db.get_absent_students(self.lesson_id)
             
@@ -235,14 +274,260 @@ class LessonDetailsDialog(QDialog):
                 student_id = student_item.data(Qt.ItemDataRole.UserRole)
                 
                 # Hole die Checkbox
-                attendance_checkbox = self.students_table.cellWidget(row, 1)
+                attendance_checkbox = self.students_table.cellWidget(row, self.COLUMN_ATTENDANCE)
                 
                 # Setze Checkbox basierend auf Anwesenheit
                 attendance_checkbox.setChecked(student_id not in absent_students)
                 
         except Exception as e:
-            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Anwesenheit: {str(e)}")
-            # Notizen später...
+            print(f"DEBUG Load - Error loading attendance: {str(e)}")
+            raise
+
+    def load_assessment_data(self):
+        """Lädt die Assessment-Daten (Noten etc.) für alle Schüler"""
+        try:
+            # Hole exemplarisch die erste Note dieser Stunde für Assessment-Typ und Name
+            cursor = self.main_window.db.execute(
+                """SELECT DISTINCT assessment_type_id, topic 
+                FROM assessments 
+                WHERE lesson_id = ? 
+                LIMIT 1""",
+                (self.lesson_id,)
+            )
+            first_assessment = cursor.fetchone()
+            
+            if first_assessment:
+                print(f"DEBUG Load - Found assessment type: {first_assessment['assessment_type_id']}")
+                # Setze Assessment-Typ in ComboBox
+                type_idx = self.assessment_type.findData(first_assessment['assessment_type_id'])
+                if type_idx >= 0:
+                    self.assessment_type.setCurrentIndex(type_idx)
+                    print(f"DEBUG Load - Set assessment type to index {type_idx}")
+                
+                # Setze Assessment-Name
+                if first_assessment['topic']:
+                    self.assessment_name.setText(first_assessment['topic'])
+                    print(f"DEBUG Load - Set assessment name to {first_assessment['topic']}")
+
+            # Lade Noten für alle Schüler
+            for row in range(self.students_table.rowCount()):
+                student_item = self.students_table.item(row, self.COLUMN_NAME)
+                student_id = student_item.data(Qt.ItemDataRole.UserRole)
+                grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
+                
+                try:
+                    assessment = self.main_window.db.get_lesson_assessment(
+                        student_id, 
+                        self.lesson_id
+                    )
+                    print(f"DEBUG Load - Raw assessment data for student {student_id}: {assessment}")
+                    
+                    if assessment:
+                        grade_str = self.number_to_grade(assessment['grade'])
+                        print(f"DEBUG Load - Converting {assessment['grade']} to string: {grade_str}")
+                        
+                        index = grade_combo.findText(grade_str)
+                        print(f"DEBUG Load - Found index {index} for grade {grade_str}")
+                        
+                        if index >= 0:
+                            grade_combo.setCurrentIndex(index)
+                            print(f"DEBUG Load - Set combobox to index {index}")
+                        else:
+                            print(f"DEBUG Load - WARNING: Grade string '{grade_str}' not found in combo items!")
+                            print(f"DEBUG Load - Available items: {[grade_combo.itemText(i) for i in range(grade_combo.count())]}")
+                except Exception as e:
+                    print(f"DEBUG Load - Error loading grade for student {student_id}: {str(e)}")
+                    continue  # Fahre mit nächstem Schüler fort
+
+        except Exception as e:
+            print(f"DEBUG Load - Error in load_assessment_data: {str(e)}")
+            raise
+
+
+    def save_data(self):
+        """Speichert alle Daten der Stunde"""
+        try:
+            print("DEBUG Save - Starting save_data()")
+
+            # Allgemeine Stundendaten
+            self.save_lesson_data()
+            
+            # Anwesenheiten speichern
+            self.save_attendance_data()
+            
+            # Noten/Assessments speichern
+            self.save_assessment_data()
+            
+            # Kompetenzen speichern
+            self.save_competency_data()
+            
+            self.accept()
+            
+            # Liste aktualisieren
+            self.main_window.list_manager.update_all(
+                self.main_window.calendar_container.get_selected_date()
+            )
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", f"Fehler beim Speichern: {str(e)}")
+
+    def save_lesson_data(self):
+        """Speichert die allgemeinen Stundendaten"""
+        print("DEBUG Save - Updating lesson data")
+        self.main_window.db.update_lesson(
+            self.lesson_id,
+            {
+                'topic': self.topic.text().strip(),
+                'homework': self.homework.toPlainText().strip()
+            }
+        )
+
+    def save_attendance_data(self):
+        """Speichert die Anwesenheitsdaten"""
+        print("DEBUG Save - Saving attendance data")
+        try:
+            # Lösche zuerst alle bestehenden Abwesenheitseinträge
+            self.main_window.db.execute(
+                "DELETE FROM student_attendance WHERE lesson_id = ?",
+                (self.lesson_id,)
+            )
+
+            # Speichere neue Abwesenheitseinträge
+            for row in range(self.students_table.rowCount()):
+                student_item = self.students_table.item(row, self.COLUMN_NAME)
+                student_id = student_item.data(Qt.ItemDataRole.UserRole)
+                
+                attendance_checkbox = self.students_table.cellWidget(row, self.COLUMN_ATTENDANCE)
+                if not attendance_checkbox.isChecked():
+                    # Speichere nur Abwesenheiten
+                    self.main_window.db.execute(
+                        """INSERT INTO student_attendance 
+                        (student_id, lesson_id) VALUES (?, ?)""",
+                        (student_id, self.lesson_id)
+                    )
+        except Exception as e:
+            print(f"DEBUG Save - Error saving attendance: {str(e)}")
+            raise
+
+    def save_assessment_data(self):
+        """Speichert die Bewertungsdaten"""
+        print("DEBUG Save - Starting assessment data save")
+        
+        # Assessment Type Info
+        assessment_type_id = self.assessment_type.currentData()
+        if not assessment_type_id:
+            return  # Kein Bewertungstyp ausgewählt
+            
+        print(f"DEBUG Save - Assessment type ID: {assessment_type_id}")
+        assessment_name = self.assessment_name.text().strip()
+        
+        for row in range(self.students_table.rowCount()):
+            try:
+                student_item = self.students_table.item(row, self.COLUMN_NAME)
+                student_id = student_item.data(Qt.ItemDataRole.UserRole)
+                print(f"DEBUG Save - Processing student ID: {student_id}")
+
+                grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
+                grade_str = grade_combo.currentText()
+
+                if grade_str:  # Nur speichern wenn Note ausgewählt
+                    numeric_grade = self.grade_to_number(grade_str)
+                    print(f"DEBUG Save - Converting {grade_str} to numeric: {numeric_grade}")
+                    
+                    if numeric_grade is not None:
+                        assessment_data = {
+                            'student_id': student_id,
+                            'course_id': self.lesson['course_id'],
+                            'assessment_type_id': assessment_type_id,
+                            'grade': numeric_grade,
+                            'date': self.lesson['date'],
+                            'lesson_id': self.lesson_id,
+                            'topic': assessment_name
+                        }
+                        print(f"DEBUG Save - Saving assessment: {assessment_data}")
+                        self.main_window.db.add_assessment(assessment_data)
+
+            except Exception as e:
+                print(f"DEBUG Save - Error processing student {student_id}: {str(e)}")
+                raise
+
+    def save_competency_data(self):
+        """Speichert die Kompetenzzuordnungen"""
+        print("DEBUG Save - Saving competency data")
+        try:
+            # Lösche bestehende Zuordnungen
+            self.main_window.db.execute(
+                "DELETE FROM lesson_competencies WHERE lesson_id = ?",
+                (self.lesson_id,)
+            )
+            
+            # Speichere neue Zuordnungen
+            for i in range(self.competencies_container.count()):
+                layout_item = self.competencies_container.itemAt(i)
+                if layout_item and layout_item.layout():
+                    combo = layout_item.layout().itemAt(0).widget()
+                    competency_id = combo.currentData()
+                    if competency_id:
+                        self.main_window.db.execute(
+                            """INSERT INTO lesson_competencies 
+                            (lesson_id, competency_id) VALUES (?, ?)""",
+                            (self.lesson_id, competency_id)
+                        )
+        except Exception as e:
+            print(f"DEBUG Save - Error saving competencies: {str(e)}")
+            raise
+
+
+    def setup_grade_combo(self, combo: QComboBox):
+        """Richtet die Noten-ComboBox ein"""
+        combo.addItem("")  # Leere Auswahl als erste Option
+        
+        try:
+            # Hole das Notensystem für den Kurs
+            grading_system = self.main_window.db.get_course_grading_system(self.lesson['course_id'])
+            if not grading_system:
+                QMessageBox.warning(self, "Warnung", 
+                                "Kein Notensystem für diesen Kurs definiert!")
+                return
+                
+            # Generiere mögliche Noten
+            current = grading_system['min_grade']
+            grades = []
+            while current <= grading_system['max_grade']:
+                base = math.floor(current)
+                decimal = current - base
+                # Bei Notensystemen mit Schritten <= 0.33 fügen wir +/- hinzu
+                if grading_system['step_size'] <= 0.4:
+                    if decimal == 0:  # Glatte Note
+                        grades.append(str(base))
+                        print(str(base))
+                    elif decimal == 0.7:  # Plus-Note (z.B. 1.7 -> "2+")
+                        grades.append(f"{base+1}+")
+                        print(f"{base+1}+")
+                    elif decimal == 0.3:  # Minus-Note (z.B. 1.3 -> "1-")
+                        grades.append(f"{base}-")
+                        print(f"{base+1}-")
+                    else:
+                        # Falls wir einen "ungültigen" Wert haben, runden wir zur nächsten gültigen Note
+                        if decimal < 0.15:  # Zur glatten Note
+                            grades.append(str(base))
+                        elif decimal < 0.5:  # Zur Minus-Note
+                            grades.append(f"{base}-")
+                        elif decimal < 0.85:  # Zur Plus-Note der nächsten Stufe
+                            grades.append(f"{base+1}+")
+                        else:  # Zur nächsten glatten Note
+                            grades.append(str(base + 1))
+                else:
+                    # Bei größeren Schritten nur die Basis-Note
+                    grades.append(str(base))
+                current = round(current + grading_system['step_size'], 2)
+                
+            combo.addItems(grades)
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                            f"Fehler beim Laden des Notensystems.{e}")
+
 
     def grade_to_number(self, grade_str: str) -> float:
         """Wandelt eine Note aus der ComboBox in einen numerischen Wert um."""
@@ -308,211 +593,6 @@ class LessonDetailsDialog(QDialog):
         except Exception as e:
             print(f"DEBUG: Error converting number {number} to grade: {str(e)}")
             return str(number)
-
-    def save_data(self):
-        try:
-            print("DEBUG Save - Starting save_data()") # NEU
-            
-            # Allgemeine Stundendaten
-            print("DEBUG Save - Updating lesson data") # NEU
-            self.main_window.db.update_lesson(
-                self.lesson_id,
-                {
-                    'topic': self.topic.text().strip(),
-                    'homework': self.homework.toPlainText().strip()
-                }
-            )
-
-            # Kompetenzen
-            print("DEBUG Save - Starting competencies update") # NEU
-            self.main_window.db.execute(
-                "DELETE FROM lesson_competencies WHERE lesson_id = ?",
-                (self.lesson_id,)
-            )
-            
-            # Schülerverarbeitung
-            print(f"DEBUG Save - Starting student processing, rows: {self.students_table.rowCount()}") # NEU
-            
-            # Assessment Type Info
-            assessment_type_id = self.assessment_type.currentData()
-            print(f"DEBUG Save - Assessment type ID: {assessment_type_id}") # NEU
-            
-            for row in range(self.students_table.rowCount()):
-                print(f"DEBUG Save - Processing row {row}") # NEU
-                student_item = self.students_table.item(row, self.COLUMN_NAME)
-                student_id = student_item.data(Qt.ItemDataRole.UserRole)
-                print(f"DEBUG Save - Student ID: {student_id}") # NEU
-
-                # Anwesenheit
-                attendance_checkbox = self.students_table.cellWidget(row, self.COLUMN_ATTENDANCE)
-                print(f"DEBUG Save - Attendance checked: {attendance_checkbox.isChecked()}") # NEU
-                    
-                # Note
-                if assessment_type_id:
-                    print("DEBUG Save - Processing grade")
-                    grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
-                    grade_str = grade_combo.currentText()
-                    print(f"DEBUG Save - Raw grade string: '{grade_str}'")
-                    
-                    if grade_str:
-                        numeric_grade = self.grade_to_number(grade_str)
-                        print(f"DEBUG Save - Converting {grade_str} to numeric: {numeric_grade}")
-                        
-                        # Assessment-Name aus dem UI-Element holen
-                        assessment_name = self.assessment_name.text().strip()
-                        print(f"DEBUG Save - Assessment name: {assessment_name}")  # NEU
-                        
-                        # Assessment-Daten zusammenstellen
-                        assessment_data = {
-                            'student_id': student_id,
-                            'course_id': self.lesson['course_id'],
-                            'assessment_type_id': assessment_type_id,
-                            'grade': numeric_grade,
-                            'date': self.lesson['date'],
-                            'lesson_id': self.lesson_id,
-                            'topic': assessment_name
-                        }
-                        print(f"DEBUG Save - About to save assessment data: {assessment_data}")
-                        
-                        try:
-                            self.main_window.db.add_assessment(assessment_data)
-                            print(f"DEBUG Save - Successfully saved assessment")
-                        except Exception as e:
-                            print(f"DEBUG Save - Error saving assessment: {str(e)}")
-                
-            self.accept()
-            
-            # Liste aktualisieren
-            self.main_window.list_manager.update_all(
-                self.main_window.calendar_container.get_selected_date()
-            )
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler", f"Fehler beim Speichern: {str(e)}")
-
-    def load_students(self):
-        """Lädt die Schüler des Kurses in die Tabelle"""
-        try:
-            semester = self.main_window.db.get_semester_dates()
-            if not semester:
-                raise ValueError("Kein aktives Semester gefunden")
-
-            # Hole semester_id aus der Historie
-            cursor = self.main_window.db.execute(
-                """SELECT id FROM semester_history 
-                WHERE start_date = ? AND end_date = ?""",
-                (semester['semester_start'], semester['semester_end'])
-            )
-            semester_result = cursor.fetchone()
-            if not semester_result:
-                raise ValueError("Aktives Semester nicht in der Historie gefunden")
-
-            # Hole alle Schüler des Kurses für das aktuelle Semester
-            students = self.main_window.db.get_students_by_course(
-                self.lesson['course_id'], 
-                semester_result['id']
-            )
-
-            # Fülle die Tabelle
-            self.students_table.setRowCount(len(students))
-            for row, student in enumerate(students):
-                # Name
-                name_item = QTableWidgetItem(f"{student['last_name']}, {student['first_name']}")
-                name_item.setData(Qt.ItemDataRole.UserRole, student['id'])
-                self.students_table.setItem(row, self.COLUMN_NAME, name_item)
-                
-                # Anwesenheit
-                attendance = QCheckBox()
-                attendance.setChecked(True)
-                self.students_table.setCellWidget(row, self.COLUMN_ATTENDANCE, attendance)
-                
-                # Note
-                grade_combo = QComboBox()
-                self.setup_grade_combo(grade_combo)
-                grade_combo.setEnabled(True)
-                self.students_table.setCellWidget(row, self.COLUMN_GRADE, grade_combo)
-                
-                # Bemerkung
-                remark = QLineEdit()
-                self.students_table.setCellWidget(row, self.COLUMN_REMARK, remark)
-                
-                # Lade existierende Note wenn vorhanden
-                try:
-                    assessment = self.main_window.db.get_lesson_assessment(
-                        student['id'], 
-                        self.lesson_id
-                    )
-                    print(f"DEBUG Load - Raw assessment data: {assessment}")  # Neue Debug-Zeile
-                    
-                    if assessment:
-                        grade_str = self.number_to_grade(assessment['grade'])
-                        print(f"DEBUG Load - Converting {assessment['grade']} to string: {grade_str}")  # Neue Debug-Zeile
-                        
-                        index = grade_combo.findText(grade_str)
-                        print(f"DEBUG Load - Found index {index} for grade {grade_str}")  # Neue Debug-Zeile
-                        
-                        if index >= 0:
-                            grade_combo.setCurrentIndex(index)
-                            print(f"DEBUG Load - Set combobox to index {index}")  # Neue Debug-Zeile
-                        else:
-                            print(f"DEBUG Load - WARNING: Grade string '{grade_str}' not found in combo items!")  # Neue Debug-Zeile
-                            print(f"DEBUG Load - Available items: {[grade_combo.itemText(i) for i in range(grade_combo.count())]}")  # Neue Debug-Zeile
-                except Exception as e:
-                    print(f"DEBUG Load - Error loading grade: {str(e)}")
-                    print(f"DEBUG Load - Full error details: ", exc_info=True)  # Neue Debug-Zeile
-                    
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Schüler: {str(e)}")
-
-    def setup_grade_combo(self, combo: QComboBox):
-        """Richtet die Noten-ComboBox ein"""
-        combo.addItem("")  # Leere Auswahl als erste Option
-        
-        try:
-            # Hole das Notensystem für den Kurs
-            grading_system = self.main_window.db.get_course_grading_system(self.lesson['course_id'])
-            if not grading_system:
-                QMessageBox.warning(self, "Warnung", 
-                                "Kein Notensystem für diesen Kurs definiert!")
-                return
-                
-            # Generiere mögliche Noten
-            current = grading_system['min_grade']
-            grades = []
-            while current <= grading_system['max_grade']:
-                base = math.floor(current)
-                decimal = current - base
-                # Bei Notensystemen mit Schritten <= 0.33 fügen wir +/- hinzu
-                if grading_system['step_size'] <= 0.4:
-                    if decimal == 0:  # Glatte Note
-                        grades.append(str(base))
-                        print(str(base))
-                    elif decimal == 0.7:  # Plus-Note (z.B. 1.7 -> "2+")
-                        grades.append(f"{base+1}+")
-                        print(f"{base+1}+")
-                    elif decimal == 0.3:  # Minus-Note (z.B. 1.3 -> "1-")
-                        grades.append(f"{base}-")
-                        print(f"{base+1}-")
-                    else:
-                        # Falls wir einen "ungültigen" Wert haben, runden wir zur nächsten gültigen Note
-                        if decimal < 0.15:  # Zur glatten Note
-                            grades.append(str(base))
-                        elif decimal < 0.5:  # Zur Minus-Note
-                            grades.append(f"{base}-")
-                        elif decimal < 0.85:  # Zur Plus-Note der nächsten Stufe
-                            grades.append(f"{base+1}+")
-                        else:  # Zur nächsten glatten Note
-                            grades.append(str(base + 1))
-                else:
-                    # Bei größeren Schritten nur die Basis-Note
-                    grades.append(str(base))
-                current = round(current + grading_system['step_size'], 2)
-                
-            combo.addItems(grades)
-                
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler", 
-                            f"Fehler beim Laden des Notensystems.{e}")
 
     def on_grade_changed(self, index: int, row: int):
         """Handler für Notenänderungen"""
