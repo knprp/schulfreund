@@ -102,8 +102,11 @@ class DatabaseManager:
                     subject TEXT,
                     description TEXT,
                     color TEXT,
+                    template_id INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (subject) REFERENCES subjects(name),
+                    FOREIGN KEY (template_id) REFERENCES assessment_type_templates(id)
                 )
             ''')
             
@@ -287,6 +290,21 @@ class DatabaseManager:
                     UNIQUE(student_id, lesson_id)
                 )
             ''')
+
+            # Tabelle für Fächer
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS subjects (
+                    name TEXT PRIMARY KEY,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Prüfe ob die template_id Spalte existiert, wenn nicht füge sie hinzu
+            try:
+                cursor.execute("ALTER TABLE courses ADD COLUMN template_id INTEGER REFERENCES assessment_type_templates(id)")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" not in str(e).lower():
+                    raise e
 
             self.conn.commit()               
         except sqlite3.Error as e:
@@ -1649,6 +1667,23 @@ class DatabaseManager:
 
         except Exception as e:
             raise Exception(f"Fehler beim Erstellen der Exportdaten: {str(e)}")
+
+    def get_course_grading_system(self, course_id: int) -> dict:
+        """Holt das Notensystem für einen Kurs über dessen Template."""
+        try:
+            cursor = self.execute(
+                """SELECT gs.* 
+                FROM courses c
+                JOIN assessment_type_templates att ON c.template_id = att.id
+                JOIN grading_systems gs ON att.grading_system_id = gs.id
+                WHERE c.id = ?""",
+                (course_id,)
+            )
+            result = cursor.fetchone()
+            return dict(result) if result else None
+        except Exception as e:
+            print(f"Error getting grading system: {str(e)}")
+            return None
 
     def add_assessment(self, data: dict) -> int:
         """Fügt eine neue Bewertung/Note hinzu oder aktualisiert eine bestehende."""

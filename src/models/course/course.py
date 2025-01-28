@@ -6,13 +6,15 @@ from typing import List, Optional, Dict
 class Course:
     def __init__(self, id: Optional[int] = None, name: str = "", 
                  type: str = "course", subject: Optional[str] = None,
-                 description: Optional[str] = None, color: Optional[str] = None):
+                 description: Optional[str] = None, color: Optional[str] = None,
+                 template_id: Optional[int] = None):
         self.id = id
         self.name = name
         self.type = type
         self.subject = subject
         self.description = description
         self.color = color
+        self.template_id = template_id
 
     @staticmethod
     def create(db, name: str, type: str = "course", subject: Optional[str] = None,
@@ -20,9 +22,9 @@ class Course:
             template_id: Optional[int] = None) -> 'Course':
         """Erstellt einen neuen Kurs in der Datenbank."""
         cursor = db.execute(
-            """INSERT INTO courses (name, type, subject, description, color) 
-            VALUES (?, ?, ?, ?, ?)""",
-            (name.strip(), type, subject, description, color)
+            """INSERT INTO courses (name, type, subject, description, color, template_id) 
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (name.strip(), type, subject, description, color, template_id)
         )
         course_id = cursor.lastrowid
 
@@ -30,7 +32,7 @@ class Course:
         if template_id:
             db.create_assessment_types_from_template(course_id, template_id)
 
-        return Course(course_id, name, type, subject, description, color)
+        return Course(course_id, name, type, subject, description, color, template_id)
 
     @staticmethod
     def get_by_id(db, course_id: int) -> Optional['Course']:
@@ -47,9 +49,11 @@ class Course:
                 type=row['type'],
                 subject=row['subject'],
                 description=row['description'],
-                color=row['color']
+                color=row['color'],
+                template_id=row['template_id']
             )
         return None
+
 
     def add_student(self, db, student_id: int, start_date: str, end_date: str) -> None:
         """Fügt einen Schüler zum Kurs hinzu."""
@@ -104,10 +108,12 @@ class Course:
             
         db.execute(
             """UPDATE courses 
-            SET name = ?, type = ?, subject = ?, description = ?, color = ?,
+            SET name = ?, type = ?, subject = ?, description = ?, 
+                color = ?, template_id = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?""",
-            (self.name, self.type, self.subject, self.description, self.color, self.id)
+            (self.name, self.type, self.subject, self.description, 
+             self.color, self.template_id, self.id)
         )
 
     def delete(self, db) -> None:
