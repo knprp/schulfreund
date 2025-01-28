@@ -94,6 +94,29 @@ class LessonDetailsDialog(QDialog):
         self.competencies_label = QLabel()
         self.update_competencies_label()
         students_layout.addWidget(self.competencies_label)
+
+        # Notengruppe
+        grade_group = QGroupBox("Bewertung")
+        grade_layout = QVBoxLayout()
+
+        # Typ der Note
+        type_layout = QHBoxLayout()
+        type_layout.addWidget(QLabel("Bewertungstyp:"))
+        self.assessment_type = QComboBox()
+        self.load_assessment_types()
+        type_layout.addWidget(self.assessment_type)
+        grade_layout.addLayout(type_layout)
+
+        # Name/Beschreibung der Note
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Bezeichnung:"))
+        self.assessment_name = QLineEdit()
+        self.assessment_name.setPlaceholderText("z.B. Vokabeltest Unit 5")
+        name_layout.addWidget(self.assessment_name)
+        grade_layout.addLayout(name_layout)
+
+        grade_group.setLayout(grade_layout)
+        students_layout.addWidget(grade_group)
         
         # Tabelle für Schüler
         self.students_table = QTableWidget()
@@ -117,29 +140,9 @@ class LessonDetailsDialog(QDialog):
         tab_widget.addTab(students_tab, "Schüler")
 
         layout.addWidget(tab_widget)
-
-        # Notengruppe
-        grade_group = QGroupBox("Noteneintrag")
-        grade_layout = QVBoxLayout()
-
-        # Typ der Note
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("Bewertungstyp:"))
-        self.assessment_type = QComboBox()
-        self.load_assessment_types()
-        type_layout.addWidget(self.assessment_type)
-        grade_layout.addLayout(type_layout)
-
-        # Name/Beschreibung der Note
-        name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("Bezeichnung:"))
-        self.assessment_name = QLineEdit()
-        self.assessment_name.setPlaceholderText("z.B. Vokabeltest Unit 5")
-        name_layout.addWidget(self.assessment_name)
-        grade_layout.addLayout(name_layout)
-
-        grade_group.setLayout(grade_layout)
-        general_layout.addWidget(grade_group)
+        
+        # Setup und Verknüpfung der Assessment-Widgets 
+        self.setup_assessment_widgets()
 
         # Buttons
         button_layout = QHBoxLayout()
@@ -240,6 +243,10 @@ class LessonDetailsDialog(QDialog):
 
             # Fülle die Tabelle
             self.students_table.setRowCount(len(students))
+            
+            # Prüfe ob ein Bewertungstyp ausgewählt ist
+            has_type = self.assessment_type.currentIndex() > 0
+            
             for row, student in enumerate(students):
                 # Name
                 name_item = QTableWidgetItem(f"{student['last_name']}, {student['first_name']}")
@@ -253,7 +260,7 @@ class LessonDetailsDialog(QDialog):
                 # Note
                 grade_combo = QComboBox()
                 self.setup_grade_combo(grade_combo)
-                grade_combo.setEnabled(True)
+                grade_combo.setEnabled(has_type)  # Initial nur aktiv wenn Typ ausgewählt
                 self.students_table.setCellWidget(row, self.COLUMN_GRADE, grade_combo)
                 
                 # Bemerkung
@@ -304,10 +311,14 @@ class LessonDetailsDialog(QDialog):
                     self.assessment_type.setCurrentIndex(type_idx)
                     print(f"DEBUG Load - Set assessment type to index {type_idx}")
                 
-                # Setze Assessment-Name
+                # Setze Assessment-Name falls vorhanden
                 if first_assessment['topic']:
                     self.assessment_name.setText(first_assessment['topic'])
                     print(f"DEBUG Load - Set assessment name to {first_assessment['topic']}")
+            else:
+                # Kein Assessment gefunden - setze auf leer/deaktiviert
+                self.assessment_type.setCurrentIndex(0)
+                self.assessment_name.setText(self.lesson['date'])
 
             # Lade Noten für alle Schüler
             for row in range(self.students_table.rowCount()):
@@ -338,10 +349,8 @@ class LessonDetailsDialog(QDialog):
                 except Exception as e:
                     print(f"DEBUG Load - Error loading grade for student {student_id}: {str(e)}")
                     continue  # Fahre mit nächstem Schüler fort
-
         except Exception as e:
-            print(f"DEBUG Load - Error in load_assessment_data: {str(e)}")
-            raise
+            print(f"Irgendein anderer Fehler: {str(e)}")
 
 
     def save_data(self):
@@ -735,11 +744,29 @@ class LessonDetailsDialog(QDialog):
             
         return combo
 
-    def on_assessment_type_changed(self, index: int, row: int):
-        """Handler für Änderungen am Bewertungstyp"""
-        combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
-        if not combo:
-            return
-            
-        # Wenn ein Typ ausgewählt wurde, aktiviere die Notenauswahl
-        combo.setEnabled(index > 0)
+    def setup_assessment_widgets(self):
+            """Richtet die Bewertungs-Widgets ein und verbindet sie"""
+            # Name-Widget initial deaktivieren
+            self.assessment_name.setEnabled(False)
+
+            # Standard-Name basierend auf dem Datum
+            default_name = self.lesson['date']  # Format ist bereits YYYY-MM-DD
+            self.assessment_name.setText(default_name)
+
+            # Verbinde Assessment-Type Change Handler
+            self.assessment_type.currentIndexChanged.connect(self.on_assessment_type_changed)
+
+    def on_assessment_type_changed(self, index):
+        """Handler für Änderungen am Assessment-Typ"""
+        print(f"DEBUG: Assessment type changed to index {index}")
+        has_type = index > 0  # Index 0 ist üblicherweise der leere Eintrag
+        
+        # Aktiviere/Deaktiviere die abhängigen Widgets
+        self.assessment_name.setEnabled(has_type)
+        
+        # Aktiviere/Deaktiviere alle Noten-ComboBoxen
+        for row in range(self.students_table.rowCount()):
+            grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
+            if grade_combo:
+                print(f"DEBUG: Setting grade combo enabled to {has_type} for row {row}")
+                grade_combo.setEnabled(has_type)

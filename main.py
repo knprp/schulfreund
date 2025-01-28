@@ -137,9 +137,6 @@ class SchoolManagement(QMainWindow):
         self.list_manager.update_all(date)
         self.list_manager.update_day_list(date)
 
-    def on_add_lesson_clicked(self):
-        """Event-Handler für '+ Button' im Kalender"""
-        self.list_manager.add_day_lesson(self.calendarWidget.selectedDate())
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
