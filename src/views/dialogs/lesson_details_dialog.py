@@ -246,43 +246,68 @@ class LessonDetailsDialog(QDialog):
 
     def grade_to_number(self, grade_str: str) -> float:
         """Wandelt eine Note aus der ComboBox in einen numerischen Wert um."""
-        if not grade_str:  # Leere Auswahl
+        if not grade_str or not grade_str.strip():
             return None
-            
-        # Basisnote
-        base = float(grade_str[0])
-        
-        # Tendenz
-        if len(grade_str) > 1:
-            if grade_str[1] == '+':
-                base -= 0.33
-            elif grade_str[1] == '-':
-                base += 0.33
-        
-        return round(base, 2)
+                
+        try:
+            print(f"DEBUG: Converting grade string '{grade_str}' to number")
+                
+            # Bei Plus/Minus-Notation
+            if len(grade_str) > 1 and (grade_str[-1] in ['+', '-']):
+                base = float(grade_str[0:-1])  # Basisnote ohne +/-
+                modifier = grade_str[-1]
+                    
+                if modifier == '+':
+                    result = base - 0.3  # Vorher 0.33
+                else:  # '-'
+                    result = base + 0.3  # Vorher 0.33
+                        
+                print(f"DEBUG: '{grade_str}' -> {result}")
+                return round(result, 2)
+            else:
+                # Einfach als Zahl parsen für glatte Noten
+                result = float(grade_str)
+                print(f"DEBUG: '{grade_str}' -> {result}")
+                return result
+                    
+        except ValueError as e:
+            print(f"DEBUG: Error converting grade '{grade_str}' to number: {str(e)}")
+            return None
 
     def number_to_grade(self, number: float) -> str:
-        """Wandelt einen numerischen Notenwert in einen Anzeige-String um.
-        
-        0.67 -> "1+"
-        1.0  -> "1"
-        1.33 -> "1-"
-        """
-        # Runde auf 2 Dezimalstellen um Fließkomma-Ungenauigkeiten zu vermeiden
-        number = round(number, 2)
-        
-        # Basisnote ist die aufgerundete Zahl
-        base = math.ceil(number)
-        
-        # Differenz zur Basisnote bestimmt + oder -
-        diff = base - number
-        
-        if diff > 0.3:  # z.B. 1 - 0.67 = 0.33 -> "1+"
-            return f"{base}+"
-        elif diff < 0.01:  # Fast 0 -> glatte Note
-            return str(base)
-        else:  # z.B. 1 - 1.33 = -0.33 -> "1-"
-            return f"{base}-"
+        """Wandelt einen numerischen Notenwert in einen Anzeige-String um."""
+        if number is None:
+            return ""
+
+        try:
+            print(f"DEBUG: Converting number {number} to grade string")
+            number = round(number, 2)  # Runde auf 2 Dezimalstellen
+            
+            # Bestimme die Basisnote (die nächste ganze Zahl)
+            base = int(number)
+            decimal = number - base
+
+            # Konvertiere in +/-/normal basierend auf Dezimalstellen
+            if decimal == 0:  # Glatte Note
+                return str(base)
+            elif decimal == 0.7:  # Plus-Note (z.B. 1.7 -> "2+")
+                return f"{base+1}+"
+            elif decimal == 0.3:  # Minus-Note (z.B. 1.3 -> "1-")
+                return f"{base}-"
+            else:
+                # Falls wir einen "ungültigen" Wert haben, runden wir zur nächsten gültigen Note
+                if decimal < 0.15:  # Zur glatten Note
+                    return str(base)
+                elif decimal < 0.5:  # Zur Minus-Note
+                    return f"{base}-"
+                elif decimal < 0.85:  # Zur Plus-Note der nächsten Stufe
+                    return f"{base+1}+"
+                else:  # Zur nächsten glatten Note
+                    return str(base + 1)
+
+        except Exception as e:
+            print(f"DEBUG: Error converting number {number} to grade: {str(e)}")
+            return str(number)
 
     def save_data(self):
         try:
@@ -447,24 +472,47 @@ class LessonDetailsDialog(QDialog):
             # Hole das Notensystem für den Kurs
             grading_system = self.main_window.db.get_course_grading_system(self.lesson['course_id'])
             if not grading_system:
-                # Wenn kein Notensystem definiert ist, nur leere Auswahl anbieten
                 QMessageBox.warning(self, "Warnung", 
                                 "Kein Notensystem für diesen Kurs definiert!")
                 return
                 
-            # Generiere mögliche Noten basierend auf dem System
+            # Generiere mögliche Noten
             current = grading_system['min_grade']
             grades = []
             while current <= grading_system['max_grade']:
-                grades.append(f"{current:.1f}")
+                base = math.floor(current)
+                decimal = current - base
+                # Bei Notensystemen mit Schritten <= 0.33 fügen wir +/- hinzu
+                if grading_system['step_size'] <= 0.4:
+                    if decimal == 0:  # Glatte Note
+                        grades.append(str(base))
+                        print(str(base))
+                    elif decimal == 0.7:  # Plus-Note (z.B. 1.7 -> "2+")
+                        grades.append(f"{base+1}+")
+                        print(f"{base+1}+")
+                    elif decimal == 0.3:  # Minus-Note (z.B. 1.3 -> "1-")
+                        grades.append(f"{base}-")
+                        print(f"{base+1}-")
+                    else:
+                        # Falls wir einen "ungültigen" Wert haben, runden wir zur nächsten gültigen Note
+                        if decimal < 0.15:  # Zur glatten Note
+                            grades.append(str(base))
+                        elif decimal < 0.5:  # Zur Minus-Note
+                            grades.append(f"{base}-")
+                        elif decimal < 0.85:  # Zur Plus-Note der nächsten Stufe
+                            grades.append(f"{base+1}+")
+                        else:  # Zur nächsten glatten Note
+                            grades.append(str(base + 1))
+                else:
+                    # Bei größeren Schritten nur die Basis-Note
+                    grades.append(str(base))
                 current = round(current + grading_system['step_size'], 2)
                 
             combo.addItems(grades)
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", 
-                            "Fehler beim Laden des Notensystems.\n"
-                            "Bitte definieren Sie zuerst ein Notensystem für diesen Kurs.")
+                            f"Fehler beim Laden des Notensystems.{e}")
 
     def on_grade_changed(self, index: int, row: int):
         """Handler für Notenänderungen"""
@@ -615,55 +663,3 @@ class LessonDetailsDialog(QDialog):
             
         # Wenn ein Typ ausgewählt wurde, aktiviere die Notenauswahl
         combo.setEnabled(index > 0)
-
-    def grade_to_number(self, grade_str: str) -> float:
-        """Wandelt eine Note aus der ComboBox in einen numerischen Wert um."""
-        if not grade_str:
-            return None
-            
-        try:
-            # Versuche erst direkt den String als Zahl zu parsen
-            # für Formate wie "1.0", "2.0" etc.
-            return float(grade_str)
-                
-        except ValueError:
-            # Wenn das nicht klappt, versuche die +/- Notation zu interpretieren
-            base = float(grade_str[0])
-            if len(grade_str) > 1:
-                if grade_str[1] == '+':
-                    base -= 0.33
-                elif grade_str[1] == '-':
-                    base += 0.33
-                    
-            return round(base, 2)
-
-    def _standard_grade_to_number(self, grade_str: str) -> float:
-        """Standard-Konvertierung für 1-6 Notensystem."""
-        if not grade_str:
-            return None
-            
-        base = float(grade_str[0])
-        if len(grade_str) > 1:
-            if grade_str[1] == '+':
-                base -= 0.33
-            elif grade_str[1] == '-':
-                base += 0.33
-                
-        return round(base, 2)
-
-    def number_to_grade(self, number: float) -> str:
-        """Wandelt einen numerischen Notenwert in einen String für die ComboBox um."""
-        return f"{float(number):.1f}"
-
-    def _standard_number_to_grade(self, number: float) -> str:
-        """Standard-Konvertierung für 1-6 Notensystem."""
-        number = round(number, 2)
-        base = math.ceil(number)
-        diff = base - number
-        
-        if diff > 0.3:
-            return f"{base}+"
-        elif diff < 0.01:
-            return str(base)
-        else:
-            return f"{base}-"

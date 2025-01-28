@@ -424,12 +424,10 @@ class DatabaseManager:
 
     def get_lessons_by_date(self, date: str) -> List[Dict[str, Any]]:
         """Holt alle Unterrichtsstunden für ein bestimmtes Datum."""
-        print("\n=== DEBUG get_lessons_by_date ===")
         
         # Erst alle Lektionen anzeigen
         cursor = self.execute("SELECT DISTINCT date FROM lessons ORDER BY date")
         dates = [row['date'] for row in cursor.fetchall()]
-        print("Available dates in lessons:", dates)
         
         # Dann die eigentliche Query
         query = """
@@ -444,11 +442,6 @@ class DatabaseManager:
         
         cursor = self.execute(query, (date,))
         results = [dict(row) for row in cursor.fetchall()]
-        print(f"\nFound {len(results)} lessons for date {date}")
-        if results:
-            print("First lesson:", results[0])
-        
-        print("=== END DEBUG ===")
         return results
 
     def get_all_lessons(self) -> List[Dict[str, Any]]:
