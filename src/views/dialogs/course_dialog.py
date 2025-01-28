@@ -47,9 +47,8 @@ class CourseDialog(QDialog):
         # Fach
         layout.addWidget(QLabel("Fach:"))
         self.subject = QComboBox()
-        self.subject.setEditable(True)
-        self.subject.addItems(["Mathematik", "Deutsch", "Englisch", "Geschichte", 
-                             "Biologie", "Chemie", "Physik", "Informatik"])
+        self.subject.setEditable(False)  # Änderung: keine freie Eingabe mehr
+        self.load_subjects()  # Neue Methode
         self.subject.currentTextChanged.connect(self.on_subject_changed)
         layout.addWidget(self.subject)
 
@@ -331,3 +330,31 @@ class CourseDialog(QDialog):
             'color': self.color.name(),
             'template_id': self.template.currentData()
         }
+
+    def load_subjects(self):
+        """Lädt die verfügbaren Fächer aus der Datenbank"""
+        try:
+            self.subject.clear()
+            self.subject.addItem("", None)  # Leere Auswahl
+            
+            # Hole alle Fächer
+            cursor = self.db.execute(
+                "SELECT name FROM subjects ORDER BY name"
+            )
+            subjects = cursor.fetchall()
+            
+            for subject in subjects:
+                self.subject.addItem(subject['name'])
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler", 
+                            f"Fehler beim Laden der Fächer: {str(e)}")
+
+    def reload_subjects(self):
+        """Aktualisiert die Fächerauswahl"""
+        current = self.subject.currentText()
+        self.load_subjects()
+        # Versuche die vorherige Auswahl wiederherzustellen
+        index = self.subject.findText(current)
+        if index >= 0:
+            self.subject.setCurrentIndex(index)

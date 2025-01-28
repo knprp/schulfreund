@@ -291,6 +291,7 @@ class ListManager:
             return
                 
         menu = QMenu()
+        details_action = menu.addAction("Details anzeigen")  # Neue Option
         edit_action = menu.addAction("Bearbeiten")
         delete_action = menu.addAction("Löschen")
         
@@ -298,7 +299,12 @@ class ListManager:
         if not action:
             return
         
-        if action == edit_action:
+        if action == details_action:  # Neuer Fall
+            from src.views.dialogs.lesson_details_dialog import LessonDetailsDialog
+            dialog = LessonDetailsDialog(self.parent, lesson_id)
+            dialog.exec()
+            self.update_day_list(self.calendar_container.get_selected_date())
+        elif action == edit_action:
             self.edit_lesson(lesson_id)
         elif action == delete_action:
             self.delete_lesson(lesson_id)
