@@ -16,6 +16,7 @@ from src.views.tabs.course_tab import CourseTab
 from src.views.tabs.student_tab import StudentTab
 from src.views.tabs.competency_tab import CompetencyTab
 from src.views.tabs.settings_tab import SettingsTab
+from src.views.tabs.subject_tab import SubjectTab
 from src.views.calendar_container import CalendarContainer
 from src.views.status_display import StatusDisplay
 
@@ -94,6 +95,11 @@ class SchoolManagement(QMainWindow):
         self.student_tab = StudentTab(self)
         self.tab_sus.setLayout(QVBoxLayout())
         self.tab_sus.layout().addWidget(self.student_tab)
+
+        # FächerTab
+        self.subject_tab = SubjectTab(self)
+        self.tab_faecher.setLayout(QVBoxLayout())
+        self.tab_faecher.layout().addWidget(self.subject_tab)
         
         # Kompetenzen-Tab
         self.competency_tab = CompetencyTab(self)
