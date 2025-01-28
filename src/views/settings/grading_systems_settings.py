@@ -118,7 +118,6 @@ class GradingSystemsSettings(QWidget):
                             grades.append(str(int(grade)))
                         else:
                             grades.append(f"{grade:.2f}")
-                            
                     self.preview_label.setText(", ".join(grades))
             else:
                 self.preview_label.clear()
