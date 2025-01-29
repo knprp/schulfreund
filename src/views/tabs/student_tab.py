@@ -3,7 +3,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
                            QPushButton, QLabel, QLineEdit, QMessageBox,
                            QComboBox)
 from PyQt6.QtCore import Qt
-
+from PyQt6.QtCharts import QChart, QChartView, QPolarChart, QSplineSeries, QValueAxis, QCategoryAxis
+from PyQt6.QtGui import QPen, QColor, QPainter
 from src.views.dialogs.student_dialog import StudentDialog
 
 
@@ -192,6 +193,44 @@ class StudentTab(QWidget):
             QHeaderView.ResizeMode.Stretch
         )
         layout.addWidget(self.course_grades_table)
+
+        # Chart erstellen
+        self.radar_chart = QPolarChart()
+        self.radar_series = QSplineSeries()
+        self.radar_series.setName("Durchschnittsnote")  # Name für Legende
+        
+        # Achsen
+        self.angular_axis = QCategoryAxis()
+        self.radial_axis = QValueAxis()
+        
+        # Achseneigenschaften setzen
+        self.radial_axis.setReverse(True)  # 6 innen, 1 außen
+        self.radial_axis.setTitleText("Note")
+        self.radial_axis.setLabelFormat("%.1f")
+        
+        # Chart-Eigenschaften
+        self.radar_chart.legend().setVisible(True)
+        self.radar_chart.setTitle("Leistung nach Kompetenzbereichen")
+        
+        # Achsen hinzufügen
+        self.radar_chart.addAxis(self.angular_axis, QPolarChart.PolarOrientation.PolarOrientationAngular)
+        self.radar_chart.addAxis(self.radial_axis, QPolarChart.PolarOrientation.PolarOrientationRadial)
+        
+        self.radar_chart.addSeries(self.radar_series)
+        self.radar_series.attachAxis(self.angular_axis)
+        self.radar_series.attachAxis(self.radial_axis)
+        
+        # Serienfarbe und -stil
+        pen = self.radar_series.pen()
+        pen.setWidth(2)
+        pen.setColor(QColor("#2563eb"))  # Schönes Blau
+        self.radar_series.setPen(pen)
+        
+        # ChartView
+        chart_view = QChartView(self.radar_chart)
+        chart_view.setMinimumHeight(400)  # Etwas größer
+        chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)  # Bessere Qualität
+        layout.addWidget(chart_view)
 
         return widget
 
@@ -779,4 +818,60 @@ class StudentTab(QWidget):
                 self,
                 "Fehler",
                 f"Fehler bei der Notenanalyse: {str(e)}"
+            )
+
+        # Lade und zeige Kompetenzanalyse
+        competency_data = self.load_competency_analysis(student_id)
+        if competency_data:
+            html = f"""
+            <div id="radar-root"></div>
+            <script>
+                const data = {json.dumps(competency_data)};
+                ReactDOM.render(
+                    React.createElement(CompetencyRadar, {{ data: data }}),
+                    document.getElementById('radar-root')
+                );
+            </script>
+            """
+            self.radar_view.setHtml(html)
+
+    def load_competency_analysis(self, student_id: int):
+        """Lädt und aktualisiert den Radar-Chart mit Kompetenzdaten"""
+        try:
+            cursor = self.main_window.db.execute(
+                """SELECT 
+                    c.area as competency_area,
+                    ROUND(AVG(a.grade), 2) as average_grade,
+                    COUNT(*) as count
+                FROM assessments a
+                JOIN lessons l ON a.lesson_id = l.id 
+                JOIN lesson_competencies lc ON l.id = lc.lesson_id
+                JOIN competencies c ON lc.competency_id = c.id
+                WHERE a.student_id = ?
+                GROUP BY c.area""",
+                (student_id,)
+            )
+            competency_data = [dict(row) for row in cursor.fetchall()]
+            
+            # Chart aktualisieren
+            self.radar_series.clear()
+            
+            # Kategorien entfernen und neu setzen
+            categories = self.angular_axis.categoriesLabels()
+            for category in categories:
+                self.angular_axis.remove(category)
+            
+            # Daten hinzufügen
+            for i, data in enumerate(competency_data):
+                self.radar_series.append(i, data['average_grade'])
+                self.angular_axis.append(data['competency_area'], i)
+            
+            # Achsen anpassen
+            self.radial_axis.setRange(1, 6)  # Notenskala
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Fehler",
+                f"Fehler beim Laden der Kompetenzanalyse: {str(e)}"
             )
