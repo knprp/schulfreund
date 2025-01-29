@@ -21,7 +21,6 @@ class DatabaseManager:
             cursor = self.execute("PRAGMA foreign_keys = ON")
             cursor = self.execute("PRAGMA foreign_keys")
             fk_enabled = cursor.fetchone()[0]
-            print(f"DEBUG: Foreign Keys enabled: {bool(fk_enabled)}")
             
         except sqlite3.Error as e:
             raise Exception(f"Datenbankverbindung fehlgeschlagen: {e}")
@@ -267,6 +266,7 @@ class DatabaseManager:
                     assessment_type_id INTEGER NOT NULL,
                     lesson_id INTEGER,
                     grade REAL NOT NULL,
+                    weight REAL DEFAULT 1.0,
                     date TEXT NOT NULL,
                     topic TEXT,
                     comment TEXT,
@@ -945,7 +945,6 @@ class DatabaseManager:
         Returns:
             Hash-String für diese Kombination
         """
-        print(f"DEBUG - generate_recurring_hash - time type: {type(time)}, value: {time}")
         return f"rec_{course_id}_{weekday}_{time.replace(':', '')}"
 
     def delete_lessons(self, lesson_id: int, delete_all_following: bool = False) -> None:
@@ -1046,18 +1045,6 @@ class DatabaseManager:
     def get_courses_by_semester(self, semester_id: int) -> list:
         """Holt alle Kurse eines bestimmten Semesters."""
         try:
-            # Debug: Zeige die rohen Verknüpfungen
-            debug_query = """
-            SELECT c.name as course_name, sc.student_id, sc.semester_id
-            FROM courses c
-            LEFT JOIN student_courses sc ON c.id = sc.course_id
-            ORDER BY c.name, sc.student_id;
-            """
-            cursor = self.execute(debug_query)
-            debug_results = [dict(row) for row in cursor.fetchall()]
-            print(f"DEBUG Raw data: {debug_results}")
-
-            # Hauptabfrage wie gehabt
             query = """
             SELECT 
                 c.*,
@@ -1069,7 +1056,6 @@ class DatabaseManager:
             """
             cursor = self.execute(query, (semester_id,))
             results = [dict(row) for row in cursor.fetchall()]
-            print(f"DEBUG Courses with counts: {results}")
             return results
         except Exception as e:
             raise Exception(f"Fehler beim Laden der Kurse: {str(e)}")
@@ -1078,24 +1064,6 @@ class DatabaseManager:
     def get_students_by_course(self, course_id: int, semester_id: int) -> list:
         """Holt alle Schüler eines Kurses in einem bestimmten Semester."""
         try:
-            # Debug-Abfrage
-            debug_query = """
-            SELECT 
-                sc.student_id,
-                s.id as student_exists,
-                s.first_name,
-                s.last_name
-            FROM student_courses sc
-            LEFT JOIN students s ON s.id = sc.student_id
-            WHERE sc.course_id = ?
-            AND sc.semester_id = ?
-            ORDER BY sc.student_id
-            """
-            cursor = self.execute(debug_query, (course_id, semester_id))
-            debug_results = [dict(row) for row in cursor.fetchall()]
-            print(f"DEBUG Student details for course {course_id}: {debug_results}")
-
-            # Hauptabfrage wie gehabt
             query = """
             SELECT
                 s.id,
@@ -1695,14 +1663,14 @@ class DatabaseManager:
                     """UPDATE assessments 
                     SET grade = ?, assessment_type_id = ?, 
                         course_id = ?, date = ?, 
-                        topic = ?, comment = ?
+                        topic = ?, weight = ?
                     WHERE student_id = ? AND lesson_id = ?""",
                     (data['grade'], 
                     data['assessment_type_id'],
                     data['course_id'],
                     data['date'],
                     data.get('topic'),
-                    data.get('comment'),
+                    data.get('weight', 1.0),  # Standardgewicht 1.0
                     data['student_id'],
                     data['lesson_id'])
                 )
@@ -1712,7 +1680,7 @@ class DatabaseManager:
                 cursor = self.execute(
                     """INSERT INTO assessments 
                     (student_id, course_id, assessment_type_id, grade,
-                        date, lesson_id, topic, comment)
+                        date, lesson_id, topic, weight)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (data['student_id'], 
                     data['course_id'],
@@ -1721,7 +1689,7 @@ class DatabaseManager:
                     data['date'],
                     data['lesson_id'],
                     data.get('topic'),
-                    data.get('comment'))
+                    data.get('weight', 1.0))  # Standardgewicht 1.0
                 )
                 return cursor.lastrowid
         except Exception as e:

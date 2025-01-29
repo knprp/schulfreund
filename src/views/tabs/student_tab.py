@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
                            QComboBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtCharts import QChart, QChartView, QPolarChart, QSplineSeries, QValueAxis, QCategoryAxis
-from PyQt6.QtGui import QPen, QColor, QPainter
+from PyQt6.QtGui import QPen, QColor, QPainter, QBrush
+import math
+
 from src.views.dialogs.student_dialog import StudentDialog
 
 
@@ -194,10 +196,13 @@ class StudentTab(QWidget):
         )
         layout.addWidget(self.course_grades_table)
 
+        # Radar/Polar Chart
+        layout.addWidget(QLabel("<b>Kompetenzbereiche</b>"))
+        
         # Chart erstellen
         self.radar_chart = QPolarChart()
         self.radar_series = QSplineSeries()
-        self.radar_series.setName("Durchschnittsnote")  # Name für Legende
+        self.radar_series.setName("Durchschnittsnote")
         
         # Achsen
         self.angular_axis = QCategoryAxis()
@@ -220,17 +225,11 @@ class StudentTab(QWidget):
         self.radar_series.attachAxis(self.angular_axis)
         self.radar_series.attachAxis(self.radial_axis)
         
-        # Serienfarbe und -stil
-        pen = self.radar_series.pen()
-        pen.setWidth(2)
-        pen.setColor(QColor("#2563eb"))  # Schönes Blau
-        self.radar_series.setPen(pen)
-        
-        # ChartView
-        chart_view = QChartView(self.radar_chart)
-        chart_view.setMinimumHeight(400)  # Etwas größer
-        chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)  # Bessere Qualität
-        layout.addWidget(chart_view)
+        # ChartView als Instanzvariable speichern
+        self.chart_view = QChartView(self.radar_chart)
+        self.chart_view.setMinimumHeight(400)
+        self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        layout.addWidget(self.chart_view)
 
         return widget
 
@@ -748,14 +747,16 @@ class StudentTab(QWidget):
     def load_analysis(self, student_id: int):
         """Lädt und zeigt die Notenanalyse für einen Schüler"""
         try:
-            # Gesamtstatistik
+            self.current_student_id = student_id
+            
+            # Gesamtstatistik mit gewichtetem Durchschnitt
             cursor = self.main_window.db.execute(
                 """SELECT 
-                    ROUND(AVG(grade), 2) as average,
+                    ROUND(SUM(grade * weight) / SUM(weight), 2) as average,
                     MIN(grade) as best,
                     MAX(grade) as worst
-                FROM assessments
-                WHERE student_id = ?""", 
+                    FROM assessments
+                    WHERE student_id = ?""", 
                 (student_id,)
             )
             overall_stats = cursor.fetchone()
@@ -770,20 +771,20 @@ class StudentTab(QWidget):
                 self.best_label.setText("-")
                 self.worst_label.setText("-")
 
-            # Statistik pro Kurs
+            # Statistik pro Kurs mit gewichtetem Durchschnitt
             cursor = self.main_window.db.execute(
                 """SELECT 
                     c.name as course_name,
-                    ROUND(AVG(a.grade), 2) as average,
+                    ROUND(SUM(a.grade * a.weight) / SUM(a.weight), 2) as average,
                     MIN(a.grade) as best,
                     MAX(a.grade) as worst,
                     COUNT(a.id) as count
-                FROM assessments a
-                JOIN courses c ON a.course_id = c.id
-                WHERE a.student_id = ?
-                GROUP BY c.id
-                HAVING count > 0
-                ORDER BY c.name""",
+                    FROM assessments a
+                    JOIN courses c ON a.course_id = c.id
+                    WHERE a.student_id = ?
+                    GROUP BY c.id
+                    HAVING count > 0
+                    ORDER BY c.name""",
                 (student_id,)
             )
             course_stats = cursor.fetchall()
@@ -811,40 +812,32 @@ class StudentTab(QWidget):
                 # Formatierung der Noten
                 for col in range(1, 4):
                     item = self.course_grades_table.item(row, col)
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    
+                    if item:  # Sicherheitscheck
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            # Debug-Ausgabe für den Radar-Chart
+            self.load_competency_analysis(student_id)
+            print("DEBUG: Points in series:", [
+                (p.x(), p.y()) for p in self.radar_series.points()
+            ])
+
         except Exception as e:
+            print(f"DEBUG: Error in load_analysis: {str(e)}")  # Debug-Ausgabe
             QMessageBox.critical(
                 self,
                 "Fehler",
                 f"Fehler bei der Notenanalyse: {str(e)}"
             )
 
-        # Lade und zeige Kompetenzanalyse
-        competency_data = self.load_competency_analysis(student_id)
-        if competency_data:
-            html = f"""
-            <div id="radar-root"></div>
-            <script>
-                const data = {json.dumps(competency_data)};
-                ReactDOM.render(
-                    React.createElement(CompetencyRadar, {{ data: data }}),
-                    document.getElementById('radar-root')
-                );
-            </script>
-            """
-            self.radar_view.setHtml(html)
-
     def load_competency_analysis(self, student_id: int):
-        """Lädt und aktualisiert den Radar-Chart mit Kompetenzdaten"""
         try:
             cursor = self.main_window.db.execute(
                 """SELECT 
                     c.area as competency_area,
-                    ROUND(AVG(a.grade), 2) as average_grade,
+                    ROUND(SUM(a.grade * a.weight) / SUM(a.weight), 2) as average_grade,
                     COUNT(*) as count
                 FROM assessments a
-                JOIN lessons l ON a.lesson_id = l.id 
+                JOIN lessons l ON a.lesson_id = l.id
                 JOIN lesson_competencies lc ON l.id = lc.lesson_id
                 JOIN competencies c ON lc.competency_id = c.id
                 WHERE a.student_id = ?
@@ -852,24 +845,89 @@ class StudentTab(QWidget):
                 (student_id,)
             )
             competency_data = [dict(row) for row in cursor.fetchall()]
+            print("DEBUG: Competency Data:", competency_data)
+
+            if len(competency_data) < 3:
+                print("DEBUG: Not enough data points for radar chart")
+                return
+
+            # Chart komplett neu erstellen
+            self.radar_chart = QPolarChart()
+            self.radar_series = QSplineSeries()
+            self.radar_series.setName("Durchschnittsnote")
+
+            # Visuelle Verbesserungen
+            pen = QPen()
+            pen.setWidth(3)  # Dickere Linie
+            pen.setColor(QColor("#1e88e5"))  # Schönes Blau
+            self.radar_series.setPen(pen)
             
-            # Chart aktualisieren
-            self.radar_series.clear()
+            # Fläche füllen
+            brush = QBrush(QColor("#1e88e5"))
+            brush.setStyle(Qt.BrushStyle.SolidPattern)
+            self.radar_series.setBrush(brush)
+            self.radar_series.setOpacity(0.3)
+
+            # Achsen
+            self.angular_axis = QCategoryAxis()
+            self.radial_axis = QValueAxis()
             
-            # Kategorien entfernen und neu setzen
-            categories = self.angular_axis.categoriesLabels()
-            for category in categories:
-                self.angular_axis.remove(category)
-            
-            # Daten hinzufügen
+            # Achseneigenschaften setzen
+            self.radial_axis.setRange(1, 6)  # Notenbereich
+            self.radial_axis.setReverse(True)  # 6 innen, 1 außen
+            self.radial_axis.setTitleText("Note")
+            self.radial_axis.setLabelFormat("%.1f")
+
+            # Radiale Achse (Noten)
+            self.radial_axis.setRange(1, 6)  
+            self.radial_axis.setReverse(True)
+            self.radial_axis.setTitleText("Note")
+            self.radial_axis.setLabelFormat("%.1f")
+
+            # Grid-Linien konfigurieren
+            self.radial_axis.setMinorTickCount(1)  # Eine Zwischenlinie pro Hauptlinie
+            self.radial_axis.setGridLineVisible(True)  # Hauptlinien anzeigen
+            self.radial_axis.setMinorGridLineVisible(True)  # Zwischenlinien anzeigen
+
+            # Grid-Linien-Style anpassen
+            major_grid_pen = QPen(QColor("#E0E0E0"))  # Hellgrau für Hauptlinien
+            major_grid_pen.setWidth(1)
+            self.radial_axis.setGridLinePen(major_grid_pen)
+
+            minor_grid_pen = QPen(QColor("#F5F5F5"))  # Sehr hellgrau für Zwischenlinien
+            minor_grid_pen.setWidth(1)
+            self.radial_axis.setMinorGridLinePen(minor_grid_pen)
+
+            # Auch für die Winkel-Achse Grid-Linien aktivieren
+            self.angular_axis.setGridLineVisible(True)
+            self.angular_axis.setGridLinePen(major_grid_pen)
+
+            # Füge Punkte hinzu - jetzt im korrekten Format für QPolarChart
+            angle_step = 360.0 / len(competency_data)
             for i, data in enumerate(competency_data):
-                self.radar_series.append(i, data['average_grade'])
-                self.angular_axis.append(data['competency_area'], i)
+                angle = i * angle_step
+                self.radar_series.append(angle, data['average_grade'])
+                self.angular_axis.append(data['competency_area'], angle)
+                print(f"DEBUG: Adding point - Angle: {angle}, Value: {data['average_grade']}")
+
+            # Schließe den Kreis
+            self.radar_series.append(360.0, competency_data[0]['average_grade'])
             
-            # Achsen anpassen
-            self.radial_axis.setRange(1, 6)  # Notenskala
+            # Chart aufbauen
+            self.radar_chart.addAxis(self.angular_axis, QPolarChart.PolarOrientation.PolarOrientationAngular)
+            self.radar_chart.addAxis(self.radial_axis, QPolarChart.PolarOrientation.PolarOrientationRadial)
+            self.radar_chart.addSeries(self.radar_series)
+            self.radar_series.attachAxis(self.angular_axis)
+            self.radar_series.attachAxis(self.radial_axis)
             
+            # ChartView aktualisieren
+            self.chart_view.setChart(self.radar_chart)
+            print("DEBUG: Points in series:", [
+                (p.x(), p.y()) for p in self.radar_series.points()
+            ])
+
         except Exception as e:
+            print("DEBUG: Exception:", str(e))
             QMessageBox.critical(
                 self,
                 "Fehler",

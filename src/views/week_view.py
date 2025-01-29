@@ -63,13 +63,6 @@ class WeekView(QWidget):
     def update_time_slots(self):
         """Aktualisiert die Zeilen und Zeitslots basierend auf den Einstellungen"""
         try:
-            print("Checking for settings...")
-            print(f"Has settings_tab: {hasattr(self.parent, 'settings_tab')}")
-            print(f"Parent type: {type(self.parent)}")
-            if hasattr(self.parent, "settings_tab"):
-                print(f"Has settings_tabs: {hasattr(self.parent.settings_tab, 'settings_tabs')}")
-                print(f"Has timetable_settings: {hasattr(self.parent.settings_tab, 'timetable_settings')}")
-            
             if hasattr(self.parent, "settings_tab") and \
                hasattr(self.parent.settings_tab, "timetable_settings") and \
                self.parent.settings_tab.timetable_settings is not None:

@@ -444,14 +444,19 @@ class LessonDetailsDialog(QDialog):
                     print(f"DEBUG Save - Converting {grade_str} to numeric: {numeric_grade}")
                     
                     if numeric_grade is not None:
+                        # Gewicht basierend auf Stundenlänge setzen
+                        weight = 2.0 if self.lesson['duration'] == 2 else 1.0
+
+                        # Assessment-Daten mit Gewicht
                         assessment_data = {
                             'student_id': student_id,
                             'course_id': self.lesson['course_id'],
                             'assessment_type_id': assessment_type_id,
-                            'grade': numeric_grade,
+                            'grade': numeric_grade,  # Hier war der Fehler
                             'date': self.lesson['date'],
                             'lesson_id': self.lesson_id,
-                            'topic': assessment_name
+                            'topic': assessment_name,
+                            'weight': weight
                         }
                         print(f"DEBUG Save - Saving assessment: {assessment_data}")
                         self.main_window.db.add_assessment(assessment_data)
