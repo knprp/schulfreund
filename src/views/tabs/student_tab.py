@@ -4,6 +4,9 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
                            QComboBox)
 from PyQt6.QtCore import Qt
 
+from src.views.dialogs.student_dialog import StudentDialog
+
+
 class StudentTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -91,7 +94,7 @@ class StudentTab(QWidget):
         layout.addWidget(left_widget, 1)  # Stretch-Faktor 1
         layout.addWidget(right_widget, 2)  # Stretch-Faktor 2
 
-        self.refresh_students()
+        self.refresh_all()
 
     def setup_remarks_tab(self) -> QWidget:
         """Erstellt den Tab für Bemerkungen"""
@@ -255,8 +258,11 @@ class StudentTab(QWidget):
     def add_student(self):
         """Öffnet den Dialog zum Hinzufügen eines Schülers"""
         try:
-            from src.views.dialogs.student_dialog import StudentDialog
-            dialog = StudentDialog(parent=self.main_window)
+            dialog = StudentDialog(
+                parent=self.main_window,
+                student=None,
+                db=self.main_window.db
+            )
             
             while True:
                 result = dialog.exec()
@@ -292,13 +298,21 @@ class StudentTab(QWidget):
                 selected[0].row(), 0
             ).data(Qt.ItemDataRole.UserRole)
             
-            student = self.main_window.db.execute(
+            # Row-Objekt aus der Datenbank holen
+            row = self.main_window.db.execute(
                 "SELECT * FROM students WHERE id = ?",
                 (student_id,)
             ).fetchone()
             
-            if student:
-                from src.views.dialogs.student_dialog import StudentDialog
+            if row:
+                # Row in Student-Objekt konvertieren
+                from src.models.student import Student
+                student = Student(
+                    id=row['id'],
+                    first_name=row['first_name'],
+                    last_name=row['last_name']
+                )
+                
                 dialog = StudentDialog(
                     parent=self.main_window,
                     student=student,

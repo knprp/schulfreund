@@ -50,6 +50,7 @@ class StudentDialog(QDialog):
         if not self.student:  # Nur beim Erstellen neuer Schüler
             save_new_btn = QPushButton("Speichern && Neu")
             save_new_btn.clicked.connect(self.save_and_new)
+            save_new_btn.setDefault(True)
             self.button_box.addButton(save_new_btn, QDialogButtonBox.ButtonRole.ActionRole)
 
         self.button_box.addButton(QDialogButtonBox.StandardButton.Ok)
@@ -58,7 +59,7 @@ class StudentDialog(QDialog):
         self.button_box.accepted.connect(self.validate_and_accept)
         self.button_box.rejected.connect(self.reject)
         button_layout.addWidget(self.button_box)
-        
+
         layout.addLayout(button_layout)
 
     def refresh_courses(self):
