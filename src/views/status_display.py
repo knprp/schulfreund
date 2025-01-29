@@ -23,9 +23,7 @@ class StatusDisplay:
     def update_semester_display(self):
         """Aktualisiert die Anzeige des aktuellen Semesters in der Statusbar"""
         try:
-            print("Starte Update der Semester-Anzeige")
             semester = self.main_window.db.get_semester_dates()
-            print(f"Geladenes Semester: {semester}")
             
             if semester:
                 start = QDate.fromString(semester['semester_start'], "yyyy-MM-dd")
@@ -36,7 +34,6 @@ class StatusDisplay:
                 
                 semester_text = f"Aktuelles Semester: {start.toString('dd.MM.yyyy')} - {end.toString('dd.MM.yyyy')}"
                 self.semester_label.setText(semester_text)
-                print(f"Erstellter Text: {semester_text}")
                 
                 if days_until_end < 0:
                     self.semester_label.setStyleSheet("color: red;")
