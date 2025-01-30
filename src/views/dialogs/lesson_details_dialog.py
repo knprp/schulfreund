@@ -307,17 +307,14 @@ class LessonDetailsDialog(QDialog):
             first_assessment = cursor.fetchone()
             
             if first_assessment:
-                print(f"DEBUG Load - Found assessment type: {first_assessment['assessment_type_id']}")
                 # Setze Assessment-Typ in ComboBox
                 type_idx = self.assessment_type.findData(first_assessment['assessment_type_id'])
                 if type_idx >= 0:
                     self.assessment_type.setCurrentIndex(type_idx)
-                    print(f"DEBUG Load - Set assessment type to index {type_idx}")
                 
                 # Setze Assessment-Name falls vorhanden
                 if first_assessment['topic']:
                     self.assessment_name.setText(first_assessment['topic'])
-                    print(f"DEBUG Load - Set assessment name to {first_assessment['topic']}")
             else:
                 # Kein Assessment gefunden - setze auf leer/deaktiviert
                 self.assessment_type.setCurrentIndex(0)
@@ -328,33 +325,29 @@ class LessonDetailsDialog(QDialog):
                 student_item = self.students_table.item(row, self.COLUMN_NAME)
                 student_id = student_item.data(Qt.ItemDataRole.UserRole)
                 grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
-                
+                remark_widget = self.students_table.cellWidget(row, self.COLUMN_REMARK)
+
                 try:
                     assessment = self.main_window.db.get_lesson_assessment(
                         student_id, 
                         self.lesson_id
-                    )
-                    print(f"DEBUG Load - Raw assessment data for student {student_id}: {assessment}")
-                    
+                    )                    
                     if assessment:
+                        # Note setzen
                         grade_str = self.number_to_grade(assessment['grade'])
-                        print(f"DEBUG Load - Converting {assessment['grade']} to string: {grade_str}")
-                        
                         index = grade_combo.findText(grade_str)
-                        print(f"DEBUG Load - Found index {index} for grade {grade_str}")
                         
                         if index >= 0:
                             grade_combo.setCurrentIndex(index)
-                            print(f"DEBUG Load - Set combobox to index {index}")
-                        else:
-                            print(f"DEBUG Load - WARNING: Grade string '{grade_str}' not found in combo items!")
-                            print(f"DEBUG Load - Available items: {[grade_combo.itemText(i) for i in range(grade_combo.count())]}")
+
+                        # Kommentar setzen falls vorhanden
+                        if assessment.get('comment'):
+                            remark_widget.setText(assessment['comment'])
+
                 except Exception as e:
-                    print(f"DEBUG Load - Error loading grade for student {student_id}: {str(e)}")
                     continue  # Fahre mit nächstem Schüler fort
         except Exception as e:
-            print(f"Irgendein anderer Fehler: {str(e)}")
-
+            print(f"Fehler beim Laden der Noten: {e}")
 
     def save_data(self):
         """Speichert alle Daten der Stunde"""
@@ -367,8 +360,15 @@ class LessonDetailsDialog(QDialog):
             # Anwesenheiten speichern
             self.save_attendance_data()
             
-            # Noten/Assessments speichern
-            self.save_assessment_data()
+            try:
+                # Noten/Assessments speichern
+                self.save_assessment_data()
+            except ValueError as e:
+                if "ungespeicherter Kommentare" in str(e):
+                    # Spezieller Fall: Nutzer hat Speichern wegen Kommentare abgebrochen
+                    return  # Dialog bleibt offen
+                else:
+                    raise  # andere ValueError weiterreichen
             
             # Kompetenzen speichern
             self.save_competency_data()
@@ -385,7 +385,6 @@ class LessonDetailsDialog(QDialog):
 
     def save_lesson_data(self):
         """Speichert die allgemeinen Stundendaten"""
-        print("DEBUG Save - Updating lesson data")
         self.main_window.db.update_lesson(
             self.lesson_id,
             {
@@ -396,7 +395,6 @@ class LessonDetailsDialog(QDialog):
 
     def save_attendance_data(self):
         """Speichert die Anwesenheitsdaten"""
-        print("DEBUG Save - Saving attendance data")
         try:
             # Lösche zuerst alle bestehenden Abwesenheitseinträge
             self.main_window.db.execute(
@@ -429,10 +427,43 @@ class LessonDetailsDialog(QDialog):
         assessment_type_id = self.assessment_type.currentData()
         if not assessment_type_id:
             return  # Kein Bewertungstyp ausgewählt
-            
+
+        # Hauptspeicherlogik
         print(f"DEBUG Save - Assessment type ID: {assessment_type_id}")
         assessment_name = self.assessment_name.text().strip()
-        
+
+        # Sammle erst alle Kommentare ohne Noten
+        comments_without_grades = []
+        for row in range(self.students_table.rowCount()):
+            student_item = self.students_table.item(row, self.COLUMN_NAME)
+            grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
+            remark_widget = self.students_table.cellWidget(row, self.COLUMN_REMARK)
+            
+            grade_str = grade_combo.currentText().strip()
+            comment = remark_widget.text().strip() if remark_widget else ""
+            
+            if comment and not grade_str:
+                comments_without_grades.append(student_item.text())
+
+        # Warnung anzeigen wenn nötig
+        if comments_without_grades:
+            warning_text = ("Folgende Schüler haben einen Kommentar aber keine Note:\n\n" + 
+                        "\n".join(f"• {name}" for name in comments_without_grades) +
+                        "\n\nDiese Kommentare werden nicht gespeichert. " +
+                        "Möchten Sie trotzdem fortfahren?")
+            
+            reply = QMessageBox.question(
+                self,
+                'Ungespeicherte Kommentare',
+                warning_text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.No:
+                raise ValueError("Speichern wegen ungespeicherter Kommentare abgebrochen")
+
+        # Jetzt das eigentliche Speichern
         for row in range(self.students_table.rowCount()):
             try:
                 student_item = self.students_table.item(row, self.COLUMN_NAME)
@@ -441,6 +472,10 @@ class LessonDetailsDialog(QDialog):
 
                 grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
                 grade_str = grade_combo.currentText().strip()
+
+                remark_widget = self.students_table.cellWidget(row, self.COLUMN_REMARK)
+                comment = remark_widget.text().strip() if remark_widget else ""
+                print(f"DEBUG Save - Comment for student {student_id}: {comment}")
 
                 # Wenn eine leere Note ausgewählt wurde, lösche eine eventuell vorhandene Note
                 if not grade_str:
@@ -451,15 +486,12 @@ class LessonDetailsDialog(QDialog):
                     )
                     continue
 
-                # Ab hier nur noch wenn wirklich eine Note ausgewählt wurde
+                # Ab hier nur noch wenn wirklich eine Note ausgewählt wurde  
                 numeric_grade = self.grade_to_number(grade_str)
                 print(f"DEBUG Save - Converting {grade_str} to numeric: {numeric_grade}")
                 
                 if numeric_grade is not None:
-                    # Gewicht basierend auf Stundenlänge setzen
                     weight = 2.0 if self.lesson['duration'] == 2 else 1.0
-
-                    # Assessment-Daten mit Gewicht
                     assessment_data = {
                         'student_id': student_id,
                         'course_id': self.lesson['course_id'],
@@ -468,9 +500,10 @@ class LessonDetailsDialog(QDialog):
                         'date': self.lesson['date'],
                         'lesson_id': self.lesson_id,
                         'topic': assessment_name,
-                        'weight': weight
+                        'weight': weight,
+                        'comment': comment
                     }
-                    print(f"DEBUG Save - Saving assessment: {assessment_data}")
+                    print(f"DEBUG Save - Complete assessment data: {assessment_data}")
                     self.main_window.db.add_assessment(assessment_data)
 
             except Exception as e:
