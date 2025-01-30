@@ -8,9 +8,8 @@ from PyQt6.QtCore import Qt, QDate, QTime
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from src.views.dialogs.course_dialog import CourseDialog
-from src.models.course import Course
 from src.views.dialogs.lesson_details_dialog import LessonDetailsDialog
-
+from src.models.course import Course
 
 class CourseTab(QWidget):
     def __init__(self, parent=None):
@@ -105,6 +104,10 @@ class CourseTab(QWidget):
         self.grades_widget = QTableWidget()
         self.grades_widget.setColumnCount(5)
         self.grades_widget.setHorizontalHeaderLabels(['Datum', 'Name', 'Kompetenzen', 'Art', 'Durchschnitt'])
+        self.grades_widget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.grades_widget.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.grades_widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.grades_widget.itemDoubleClicked.connect(self.on_grade_double_clicked)
         self.detail_tabs.addTab(self.grades_widget, "Noten")
         
         # Widgets zum Splitter hinzufügen
@@ -157,7 +160,6 @@ class CourseTab(QWidget):
             self.lessons_widget.setRowCount(0)
             self.lessons_widget.setRowCount(len(lessons))
             
-  
             
             # Spaltenbreiten optimieren
             header = self.lessons_widget.horizontalHeader()
@@ -272,10 +274,104 @@ class CourseTab(QWidget):
                 f"Fehler beim Öffnen der Stundendetails: {str(e)}"
             )
 
+    def on_grade_double_clicked(self, item):
+        """Öffnet den LessonDetailsDialog für die ausgewählte Note"""
+        try:
+            # Hole die lesson_id aus der ersten Spalte der ausgewählten Zeile
+            lesson_id = self.grades_widget.item(item.row(), 0).data(Qt.ItemDataRole.UserRole)
+            if lesson_id:  # Nur öffnen wenn es eine verknüpfte Stunde gibt
+                dialog = LessonDetailsDialog(self.parent, lesson_id)
+                # Setze den Tab auf "Schüler" (Index 1)
+                dialog.tab_widget.setCurrentIndex(1)
+                if dialog.exec():
+                    # Nach Schließen des Dialogs Notenliste aktualisieren
+                    selected_items = self.courses_table.selectedItems()
+                    if selected_items:
+                        course_id = self.courses_table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
+                        self.load_course_grades(course_id)
+                        
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Fehler", 
+                f"Fehler beim Öffnen der Stundendetails: {str(e)}"
+            )
+
     def load_course_grades(self, course_id: int):
-        """Lädt die Noten des ausgewählten Kurses"""
-        # TODO: Implementierung folgt
-        pass
+        """Lädt alle Bewertungen des ausgewählten Kurses"""
+        try:
+            # Hole alle Bewertungen mit zugehörigen Details
+            cursor = self.parent.db.execute("""
+                SELECT 
+                    a.date,
+                    s.first_name || ' ' || s.last_name as student_name,
+                    GROUP_CONCAT(c.area || ': ' || c.description) as competencies,
+                    at.name as assessment_type,
+                    ROUND(AVG(a.grade), 2) as average_grade,
+                    a.topic,
+                    COUNT(DISTINCT s.id) as student_count,
+                    a.lesson_id
+                FROM assessments a
+                JOIN students s ON a.student_id = s.id
+                JOIN assessment_types at ON a.assessment_type_id = at.id
+                LEFT JOIN lessons l ON a.lesson_id = l.id
+                LEFT JOIN lesson_competencies lc ON l.id = lc.lesson_id
+                LEFT JOIN competencies c ON lc.competency_id = c.id
+                WHERE a.course_id = ?
+                GROUP BY a.date, a.topic, at.id
+                ORDER BY a.date DESC, at.name
+            """, (course_id,))
+            
+            grades = cursor.fetchall()
+            
+            # Tabelle leeren und Größe anpassen
+            self.grades_widget.setRowCount(0)
+            self.grades_widget.setRowCount(len(grades))
+            
+            # Spaltenbreiten optimieren
+            header = self.grades_widget.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Datum
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Name
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)          # Kompetenzen
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Art
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Durchschnitt
+            
+            # Bewertungen einfügen
+            for row, grade in enumerate(grades):
+                # Datum
+                date_item = QTableWidgetItem(grade['date'])
+                if grade['lesson_id']:
+                    date_item.setData(Qt.ItemDataRole.UserRole, grade['lesson_id'])
+                self.grades_widget.setItem(row, 0, date_item)
+                
+                # Name für die Bewertung (z.B. "Klassenarbeit 1" oder der erste Schülername)
+                name = grade['topic'] if grade['topic'] else grade['student_name']
+                if grade['student_count'] > 1:
+                    name += f" (+{grade['student_count']-1} weitere)"
+                name_item = QTableWidgetItem(name)
+                self.grades_widget.setItem(row, 1, name_item)
+                
+                # Kompetenzen
+                comp_text = grade['competencies'] or ""
+                comp_item = QTableWidgetItem(comp_text.replace(",", "\n"))
+                self.grades_widget.setItem(row, 2, comp_item)
+                
+                # Art der Bewertung
+                type_item = QTableWidgetItem(grade['assessment_type'])
+                self.grades_widget.setItem(row, 3, type_item)
+                
+                # Durchschnittsnote
+                avg_item = QTableWidgetItem(f"{grade['average_grade']:.2f}")
+                # Rechts ausrichten
+                avg_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.grades_widget.setItem(row, 4, avg_item)
+                
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Fehler",
+                f"Fehler beim Laden der Bewertungen: {str(e)}"
+            )
 
 
     def add_course(self):
