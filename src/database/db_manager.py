@@ -1663,14 +1663,15 @@ class DatabaseManager:
                     """UPDATE assessments 
                     SET grade = ?, assessment_type_id = ?, 
                         course_id = ?, date = ?, 
-                        topic = ?, weight = ?
+                        topic = ?, comment = ?, weight = ?
                     WHERE student_id = ? AND lesson_id = ?""",
                     (data['grade'], 
                     data['assessment_type_id'],
                     data['course_id'],
                     data['date'],
                     data.get('topic'),
-                    data.get('weight', 1.0),  # Standardgewicht 1.0
+                    data.get('comment'),  # Kommentar hinzugefügt
+                    data.get('weight', 1.0),
                     data['student_id'],
                     data['lesson_id'])
                 )
@@ -1680,8 +1681,8 @@ class DatabaseManager:
                 cursor = self.execute(
                     """INSERT INTO assessments 
                     (student_id, course_id, assessment_type_id, grade,
-                        date, lesson_id, topic, weight)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        date, lesson_id, topic, comment, weight)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (data['student_id'], 
                     data['course_id'],
                     data['assessment_type_id'], 
@@ -1689,7 +1690,8 @@ class DatabaseManager:
                     data['date'],
                     data['lesson_id'],
                     data.get('topic'),
-                    data.get('weight', 1.0))  # Standardgewicht 1.0
+                    data.get('comment'),  # Kommentar hinzugefügt
+                    data.get('weight', 1.0))
                 )
                 return cursor.lastrowid
         except Exception as e:
