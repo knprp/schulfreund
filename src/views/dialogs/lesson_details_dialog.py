@@ -156,6 +156,9 @@ class LessonDetailsDialog(QDialog):
         
         layout.addLayout(button_layout)
 
+        # Das tab_widget noch einmal als Instanzvariable speichern, damit wir drauf zugreifen können (um direkt in anderem Tab zu öffnen)
+        self.tab_widget = tab_widget
+
     def load_data(self):
         """Lädt die Daten der Stunde in den Dialog"""
         try:
