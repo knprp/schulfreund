@@ -80,7 +80,7 @@ class CourseTab(QWidget):
         button_layout.addStretch()
         left_layout.addLayout(button_layout)
         
-        # Kontextmenü
+        # Kontextmenü Kurse
         self.courses_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.courses_table.customContextMenuRequested.connect(self.show_context_menu)
         
@@ -108,6 +108,11 @@ class CourseTab(QWidget):
         self.grades_widget.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.grades_widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.grades_widget.itemDoubleClicked.connect(self.on_grade_double_clicked)
+        self.detail_tabs.addTab(self.grades_widget, "Noten")
+        
+        # Kontextmenü Noten
+        self.grades_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.grades_widget.customContextMenuRequested.connect(self.show_grades_context_menu)
         self.detail_tabs.addTab(self.grades_widget, "Noten")
         
         # Widgets zum Splitter hinzufügen
@@ -296,6 +301,25 @@ class CourseTab(QWidget):
                 "Fehler", 
                 f"Fehler beim Öffnen der Stundendetails: {str(e)}"
             )
+                
+    def show_grades_context_menu(self, pos):
+        """Zeigt das Kontextmenü für die Noten"""
+        item = self.grades_widget.itemAt(pos)
+        if item is None:
+            return
+            
+        row = item.row()
+        lesson_id = self.grades_widget.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        if not lesson_id:
+            return
+            
+        menu = QMenu()
+        delete_action = menu.addAction("Bewertung löschen")
+        
+        action = menu.exec(self.grades_widget.viewport().mapToGlobal(pos))
+        if action == delete_action:
+            self.delete_grade_group(row)
+                
 
     def load_course_grades(self, course_id: int):
         """Lädt alle Bewertungen des ausgewählten Kurses"""
@@ -373,6 +397,66 @@ class CourseTab(QWidget):
                 f"Fehler beim Laden der Bewertungen: {str(e)}"
             )
 
+    def delete_grade_group(self, row):
+        """Löscht alle Noten der ausgewählten Bewertung"""
+        try:
+            lesson_id = self.grades_widget.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            display_name = self.grades_widget.item(row, 1).text()
+            
+            print(f"DEBUG: Versuche Noten zu löschen für lesson_id={lesson_id}")
+            
+            # Bestätigung einholen
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setText(f"Möchten Sie wirklich alle Noten für '{display_name}' löschen?")
+            msg.setInformativeText("Diese Aktion kann nicht rückgängig gemacht werden.")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setDefaultButton(QMessageBox.StandardButton.No)
+            
+            if msg.exec() == QMessageBox.StandardButton.Yes:
+                # Zuerst prüfen wie viele Noten betroffen sind
+                cursor = self.parent.db.execute("""
+                    SELECT COUNT(*) as count 
+                    FROM assessments 
+                    WHERE lesson_id = ?
+                """, (lesson_id,))
+                count = cursor.fetchone()['count']
+                print(f"DEBUG: {count} Noten gefunden zum Löschen")
+
+                # Alle Noten dieser Stunde löschen
+                cursor = self.parent.db.execute("""
+                    DELETE FROM assessments 
+                    WHERE lesson_id = ?
+                """, (lesson_id,))
+                print(f"DEBUG: {cursor.rowcount} Noten wurden gelöscht")
+                
+                # Commit um sicherzustellen dass die Änderungen gespeichert sind
+                self.parent.db.conn.commit()
+                
+                # Prüfe ob noch Noten existieren
+                cursor = self.parent.db.execute("""
+                    SELECT COUNT(*) as count 
+                    FROM assessments 
+                    WHERE lesson_id = ?
+                """, (lesson_id,))
+                remaining = cursor.fetchone()['count']
+                print(f"DEBUG: {remaining} Noten verbleiben")
+
+                # Aktualisiere die Ansicht
+                selected_items = self.courses_table.selectedItems()
+                if selected_items:
+                    course_id = self.courses_table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
+                    print(f"DEBUG: Aktualisiere Ansicht für Kurs {course_id}")
+                    self.load_course_grades(course_id)
+                    
+                self.parent.statusBar().showMessage(f"{count} Bewertungen wurden gelöscht", 3000)
+                
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Fehler", 
+                f"Fehler beim Löschen der Bewertung: {str(e)}"
+            )
 
     def add_course(self):
         try:
