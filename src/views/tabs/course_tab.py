@@ -2,11 +2,15 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                            QTableWidget, QTableWidgetItem, QHeaderView, 
-                           QMessageBox, QMenu)
+                           QMessageBox, QMenu, QSplitter, QTabWidget,
+                           QAbstractItemView)
+from PyQt6.QtCore import Qt, QDate, QTime
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from src.views.dialogs.course_dialog import CourseDialog
 from src.models.course import Course
+from src.views.dialogs.lesson_details_dialog import LessonDetailsDialog
+
 
 class CourseTab(QWidget):
     def __init__(self, parent=None):
@@ -16,30 +20,37 @@ class CourseTab(QWidget):
         self.refresh_courses()
 
     def setup_ui(self):
-        layout = QVBoxLayout(self)
+        # Hauptlayout ist jetzt horizontal
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Tabelle für Kurse
+        # Splitter für flexible Größenanpassung
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # Linke Seite - Kursübersicht
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(8, 8, 8, 8)
+        
+        # Kurstabelle
         self.courses_table = QTableWidget()
         self.courses_table.setColumnCount(4)
         self.courses_table.setHorizontalHeaderLabels(['Name', 'Typ', 'Fach', 'Beschreibung'])
         self.courses_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.courses_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.courses_table.itemSelectionChanged.connect(self.on_course_selected)
         
-        # Größere Schrift und Zellen
+        # Styling der Tabelle
         font = self.courses_table.font()
-        font.setPointSize(11)  # Größere Schrift
+        font.setPointSize(11)
         self.courses_table.setFont(font)
         
-        # Header-Schrift auch größer
         header_font = self.courses_table.horizontalHeader().font()
         header_font.setPointSize(11)
         header_font.setBold(True)
         self.courses_table.horizontalHeader().setFont(header_font)
         
-        # Zeilenhöhe vergrößern
-        self.courses_table.verticalHeader().setDefaultSectionSize(40)  # Höhere Zeilen
-        
-        # Verbesserte Darstellung für Farben
+        self.courses_table.verticalHeader().setDefaultSectionSize(40)
         self.courses_table.setShowGrid(True)
         self.courses_table.setAlternatingRowColors(False)
         self.courses_table.setStyleSheet("""
@@ -48,7 +59,7 @@ class CourseTab(QWidget):
                 background-color: white;
             }
             QTableWidget::item {
-                padding: 8px;  # Mehr Innenabstand
+                padding: 8px;
                 font-size: 11pt;
             }
             QHeaderView::section {
@@ -58,20 +69,213 @@ class CourseTab(QWidget):
             }
         """)
         
-        layout.addWidget(self.courses_table)
+        left_layout.addWidget(self.courses_table)
         
-        # Buttons auch größer
+        # Button zum Hinzufügen
         button_layout = QHBoxLayout()
         btn_add = QPushButton("Kurs hinzufügen")
-        btn_add.setMinimumHeight(32)  # Höhere Buttons
-        btn_add.setFont(font)  # Gleiche Schriftgröße wie Tabelle
+        btn_add.setMinimumHeight(32)
+        btn_add.setFont(font)
         btn_add.clicked.connect(self.add_course)
         button_layout.addWidget(btn_add)
         button_layout.addStretch()
-        layout.addLayout(button_layout)
+        left_layout.addLayout(button_layout)
         
+        # Kontextmenü
         self.courses_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.courses_table.customContextMenuRequested.connect(self.show_context_menu)
+        
+        # Rechte Seite - Details
+        self.detail_tabs = QTabWidget()
+        
+        # Tab für Stunden
+        self.lessons_widget = QTableWidget()
+        self.lessons_widget.setColumnCount(4)
+        self.lessons_widget.setHorizontalHeaderLabels(['Datum', 'Zeit', 'Thema', 'Kompetenzen'])
+        # Konfiguration für Stunden-Table
+        self.lessons_widget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.lessons_widget.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.lessons_widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        # Doppelklick aktivieren
+        self.lessons_widget.itemDoubleClicked.connect(self.on_lesson_double_clicked)
+        
+        self.detail_tabs.addTab(self.lessons_widget, "Stunden")
+        
+        # Tab für Noten
+        self.grades_widget = QTableWidget()
+        self.grades_widget.setColumnCount(5)
+        self.grades_widget.setHorizontalHeaderLabels(['Datum', 'Name', 'Kompetenzen', 'Art', 'Durchschnitt'])
+        self.detail_tabs.addTab(self.grades_widget, "Noten")
+        
+        # Widgets zum Splitter hinzufügen
+        splitter.addWidget(left_widget)
+        splitter.addWidget(self.detail_tabs)
+        
+        # Initiale Größenverhältnisse setzen (40% links, 60% rechts)
+        splitter.setSizes([400, 600])
+        
+        # Splitter zum Hauptlayout hinzufügen
+        main_layout.addWidget(splitter)
+
+    def on_course_selected(self):
+        """Handler für Kursauswahl - lädt die Details des ausgewählten Kurses"""
+        selected_items = self.courses_table.selectedItems()
+        if not selected_items:
+            return
+            
+        course_id = self.courses_table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
+        self.load_course_details(course_id)
+
+    def load_course_details(self, course_id: int):
+        """Lädt die Details (Stunden und Noten) für den ausgewählten Kurs"""
+        self.load_course_lessons(course_id)
+        self.load_course_grades(course_id)
+
+    def load_course_lessons(self, course_id: int):
+        """Lädt die Stunden des ausgewählten Kurses"""
+        try:
+            # Hole alle Stunden mit ihren Kompetenzen
+            cursor = self.parent.db.execute("""
+                SELECT DISTINCT 
+                    l.id,
+                    l.date,
+                    l.time,
+                    l.topic,
+                    l.duration,
+                    GROUP_CONCAT(c.area || ': ' || c.description) as competencies
+                FROM lessons l
+                LEFT JOIN lesson_competencies lc ON l.id = lc.lesson_id
+                LEFT JOIN competencies c ON lc.competency_id = c.id
+                WHERE l.course_id = ?
+                GROUP BY l.id
+                ORDER BY l.date DESC, l.time DESC
+            """, (course_id,))
+            
+            lessons = cursor.fetchall()
+            
+            # Tabelle leeren und Größe anpassen
+            self.lessons_widget.setRowCount(0)
+            self.lessons_widget.setRowCount(len(lessons))
+            
+  
+            
+            # Spaltenbreiten optimieren
+            header = self.lessons_widget.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Datum
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Zeit
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)          # Thema
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)          # Kompetenzen
+            
+            for row, lesson in enumerate(lessons):
+                # Datum
+                date_item = QTableWidgetItem(lesson['date'])
+                self.lessons_widget.setItem(row, 0, date_item)
+                
+                # Zeit (mit Doppelstunden-Markierung)
+                time_text = lesson['time']
+                if lesson['duration'] == 2:
+                    time_text += " (Doppelstunde)"
+                time_item = QTableWidgetItem(time_text)
+                self.lessons_widget.setItem(row, 1, time_item)
+                
+                # Thema
+                topic_item = QTableWidgetItem(lesson['topic'] or "")
+                self.lessons_widget.setItem(row, 2, topic_item)
+                
+                # Kompetenzen
+                comp_text = lesson['competencies'] or ""
+                comp_item = QTableWidgetItem(comp_text.replace(",", "\n"))
+                self.lessons_widget.setItem(row, 3, comp_item)
+                
+                # Lesson-ID als Userdata speichern
+                date_item.setData(Qt.ItemDataRole.UserRole, lesson['id'])
+                
+            # Automatische Auswahl der nächsten Stunde
+            if self.lessons_widget.rowCount() > 0:
+                # Aktuelle Zeit/Datum für Vergleich
+                current_date = QDate.currentDate().toString("yyyy-MM-dd")
+                current_time = QTime.currentTime().toString("HH:mm")
+                
+                # Suche zuerst nach Stunden am aktuellen Tag
+                current_day_rows = []
+                future_rows = []
+                past_rows = []
+                
+                for row in range(self.lessons_widget.rowCount()):
+                    lesson_date = self.lessons_widget.item(row, 0).text()
+                    lesson_time = self.lessons_widget.item(row, 1).text().split(" ")[0]  # Zeit ohne "(Doppelstunde)"
+                    
+                    if lesson_date == current_date:
+                        current_day_rows.append((row, lesson_time))
+                    elif lesson_date > current_date:
+                        future_rows.append((row, lesson_date))
+                    else:
+                        past_rows.append((row, lesson_date))
+                
+                # Finde die nächste Stunde für heute
+                next_row = None
+                if current_day_rows:
+                    # Sortiere nach Zeit
+                    current_day_rows.sort(key=lambda x: x[1])
+                    # Finde die nächste Stunde heute
+                    for row, time in current_day_rows:
+                        if time >= current_time:
+                            next_row = row
+                            break
+                    # Wenn keine spätere Stunde heute, nehme die erste Stunde des nächsten Datums
+                    if next_row is None and future_rows:
+                        future_rows.sort(key=lambda x: x[1])  # Sortiere nach Datum
+                        next_row = future_rows[0][0]
+                # Wenn kein heutiges Datum gefunden, nimm das nächste verfügbare Datum
+                elif future_rows:
+                    future_rows.sort(key=lambda x: x[1])  # Sortiere nach Datum
+                    next_row = future_rows[0][0]
+                # Wenn keine zukünftigen Stunden, nimm die letzte vergangene Stunde
+                elif past_rows:
+                    past_rows.sort(key=lambda x: x[1], reverse=True)  # Sortiere nach Datum absteigend
+                    next_row = past_rows[0][0]
+                else:
+                    next_row = 0  # Fallback auf erste Zeile
+                
+                # Zeile auswählen und sichtbar machen
+                self.lessons_widget.selectRow(next_row)
+                self.lessons_widget.scrollTo(
+                    self.lessons_widget.model().index(next_row, 0),
+                    QAbstractItemView.ScrollHint.PositionAtCenter
+                )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Fehler",
+                f"Fehler beim Laden der Stunden: {str(e)}"
+            )
+
+    def on_lesson_double_clicked(self, item):
+        """Öffnet den LessonDetailsDialog für die ausgewählte Stunde"""
+        try:
+            # Hole die lesson_id aus der ersten Spalte der ausgewählten Zeile
+            lesson_id = self.lessons_widget.item(item.row(), 0).data(Qt.ItemDataRole.UserRole)
+            
+            dialog = LessonDetailsDialog(self.parent, lesson_id)
+            if dialog.exec():
+                # Nach Schließen des Dialogs Stundenliste aktualisieren
+                selected_items = self.courses_table.selectedItems()
+                if selected_items:
+                    course_id = self.courses_table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
+                    self.load_course_lessons(course_id)
+                    
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Fehler", 
+                f"Fehler beim Öffnen der Stundendetails: {str(e)}"
+            )
+
+    def load_course_grades(self, course_id: int):
+        """Lädt die Noten des ausgewählten Kurses"""
+        # TODO: Implementierung folgt
+        pass
 
 
     def add_course(self):
