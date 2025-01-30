@@ -440,29 +440,38 @@ class LessonDetailsDialog(QDialog):
                 print(f"DEBUG Save - Processing student ID: {student_id}")
 
                 grade_combo = self.students_table.cellWidget(row, self.COLUMN_GRADE)
-                grade_str = grade_combo.currentText()
+                grade_str = grade_combo.currentText().strip()
 
-                if grade_str:  # Nur speichern wenn Note ausgewählt
-                    numeric_grade = self.grade_to_number(grade_str)
-                    print(f"DEBUG Save - Converting {grade_str} to numeric: {numeric_grade}")
-                    
-                    if numeric_grade is not None:
-                        # Gewicht basierend auf Stundenlänge setzen
-                        weight = 2.0 if self.lesson['duration'] == 2 else 1.0
+                # Wenn eine leere Note ausgewählt wurde, lösche eine eventuell vorhandene Note
+                if not grade_str:
+                    self.main_window.db.execute(
+                        """DELETE FROM assessments 
+                        WHERE student_id = ? AND lesson_id = ?""",
+                        (student_id, self.lesson_id)
+                    )
+                    continue
 
-                        # Assessment-Daten mit Gewicht
-                        assessment_data = {
-                            'student_id': student_id,
-                            'course_id': self.lesson['course_id'],
-                            'assessment_type_id': assessment_type_id,
-                            'grade': numeric_grade,  # Hier war der Fehler
-                            'date': self.lesson['date'],
-                            'lesson_id': self.lesson_id,
-                            'topic': assessment_name,
-                            'weight': weight
-                        }
-                        print(f"DEBUG Save - Saving assessment: {assessment_data}")
-                        self.main_window.db.add_assessment(assessment_data)
+                # Ab hier nur noch wenn wirklich eine Note ausgewählt wurde
+                numeric_grade = self.grade_to_number(grade_str)
+                print(f"DEBUG Save - Converting {grade_str} to numeric: {numeric_grade}")
+                
+                if numeric_grade is not None:
+                    # Gewicht basierend auf Stundenlänge setzen
+                    weight = 2.0 if self.lesson['duration'] == 2 else 1.0
+
+                    # Assessment-Daten mit Gewicht
+                    assessment_data = {
+                        'student_id': student_id,
+                        'course_id': self.lesson['course_id'],
+                        'assessment_type_id': assessment_type_id,
+                        'grade': numeric_grade,
+                        'date': self.lesson['date'],
+                        'lesson_id': self.lesson_id,
+                        'topic': assessment_name,
+                        'weight': weight
+                    }
+                    print(f"DEBUG Save - Saving assessment: {assessment_data}")
+                    self.main_window.db.add_assessment(assessment_data)
 
             except Exception as e:
                 print(f"DEBUG Save - Error processing student {student_id}: {str(e)}")
