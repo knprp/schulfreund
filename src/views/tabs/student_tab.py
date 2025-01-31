@@ -7,6 +7,7 @@ from PyQt6.QtCharts import QChart, QChartView, QPolarChart, QSplineSeries, QValu
 from PyQt6.QtGui import QPen, QColor, QPainter, QBrush
 import math
 
+from src.models.student import Student
 from src.views.dialogs.student_dialog import StudentDialog
 from src.views.student.remarks_widget import RemarksWidget
 from src.views.student.grades_widget import GradesWidget
@@ -117,21 +118,6 @@ class StudentTab(QWidget):
 
         self.refresh_all()
        
-
-    def refresh_students(self):
-        """Aktualisiert die Schülerliste"""
-        try:
-            students = self.main_window.db.get_all_students()
-            self.students_table.setRowCount(len(students))
-            
-            for row, student in enumerate(students):
-                # Name
-                self.students_table.setItem(
-                    row, 0, 
-                    QTableWidgetItem(student['last_name'])
-                )
-        except Exception as e:
-            print ("Fehler beim refreshen trat auf:", e)
 
     def refresh_course_filter(self):
         """Aktualisiert die Kursauswahl"""
@@ -290,140 +276,75 @@ class StudentTab(QWidget):
             )
 
     def create_student(self, data: dict) -> int:
-        """Erstellt einen neuen Schüler in der Datenbank"""
-        try:
-            cursor = self.main_window.db.execute(
-                """INSERT INTO students (first_name, last_name)
-                VALUES (?, ?)""",
-                (data['first_name'], data['last_name'])
-            )
-            student_id = cursor.lastrowid
+        """Erstellt einen neuen Schüler"""
+        student = Student.create(
+            self.main_window.db,
+            first_name=data['first_name'],
+            last_name=data['last_name']
+        )
+
+        # Kurse zuweisen
+        for course_id in data.get('course_ids', []):
+            student.add_course(self.main_window.db, course_id, self.get_current_semester_id())
             
-            # Kurszuordnungen
-            if data['course_ids']:
-                semester = self.main_window.db.get_semester_dates()
-                if not semester:
-                    raise ValueError("Kein aktives Semester gefunden")
-                    
-                # Hole semester_id aus der Historie
-                cursor = self.main_window.db.execute(
-                    """SELECT id FROM semester_history 
-                    WHERE start_date = ? AND end_date = ?""",
-                    (semester['semester_start'], semester['semester_end'])
-                )
-                semester_result = cursor.fetchone()
-                if not semester_result:
-                    raise ValueError("Aktives Semester nicht in der Historie gefunden")
-                
-                for course_id in data['course_ids']:
-                    self.main_window.db.execute(
-                        """INSERT INTO student_courses 
-                        (student_id, course_id, semester_id)
-                        VALUES (?, ?, ?)""",
-                        (student_id, course_id, semester_result['id'])
-                    )
-            
-            return student_id
-            
-        except Exception as e:
-            raise Exception(f"Fehler beim Erstellen des Schülers: {str(e)}")
+        return student.id
 
     def update_student(self, student_id: int, data: dict) -> None:
-        """Aktualisiert einen Schüler in der Datenbank"""
-        try:
-            self.main_window.db.execute(
-                """UPDATE students 
-                SET first_name = ?, last_name = ?
-                WHERE id = ?""",
-                (data['first_name'], data['last_name'], student_id)
-            )
+        student = Student.get_by_id(self.main_window.db, student_id)
+        if not student:
+            raise ValueError("Student nicht gefunden")
             
-            # Kurszuordnungen aktualisieren
-            semester = self.main_window.db.get_semester_dates()
-            if not semester:
-                raise ValueError("Kein aktives Semester gefunden")
-                
-            # Hole semester_id aus der Historie
-            cursor = self.main_window.db.execute(
-                """SELECT id FROM semester_history 
-                WHERE start_date = ? AND end_date = ?""",
-                (semester['semester_start'], semester['semester_end'])
-            )
-            semester_result = cursor.fetchone()
-            if not semester_result:
-                raise ValueError("Aktives Semester nicht in der Historie gefunden")
-                
-            # Lösche alte Zuordnungen
-            self.main_window.db.execute(
-                "DELETE FROM student_courses WHERE student_id = ? AND semester_id = ?",
-                (student_id, semester_result['id'])
-            )
-            
-            # Füge neue Zuordnungen hinzu
-            for course_id in data['course_ids']:
-                self.main_window.db.execute(
-                    """INSERT INTO student_courses 
-                    (student_id, course_id, semester_id)
-                    VALUES (?, ?, ?)""",
-                    (student_id, course_id, semester_result['id'])
-                )
-                
-        except Exception as e:
-            raise Exception(f"Fehler beim Aktualisieren des Schülers: {str(e)}")
+        student.first_name = data['first_name']
+        student.last_name = data['last_name']
+        student.update(self.main_window.db)
+
+        for course_id in data.get('course_ids', []):
+            student.add_course(self.main_window.db, course_id, self.get_current_semester_id())
 
     def refresh_students(self):
         """Aktualisiert die Schülerliste"""
         try:
             course_id = self.course_filter.currentData()
-            
-            if course_id:
-                # Hole Schüler des ausgewählten Kurses
-                semester = self.main_window.db.get_semester_dates()
-                if not semester:
-                    return
-                    
-                cursor = self.main_window.db.execute(
-                    """SELECT DISTINCT s.* 
-                    FROM students s
-                    JOIN student_courses sc ON s.id = sc.student_id
-                    JOIN semester_history sh ON sc.semester_id = sh.id
-                    WHERE sc.course_id = ?
-                    AND sh.start_date = ? AND sh.end_date = ?
-                    ORDER BY s.last_name, s.first_name""",
-                    (course_id, semester['semester_start'], semester['semester_end'])
-                )
-            else:
-                # Hole alle Schüler
-                cursor = self.main_window.db.execute(
-                    """SELECT * FROM students 
-                    ORDER BY last_name, first_name"""
-                )
+            semester = self.main_window.db.get_semester_dates()
+
+            # Alle Schüler laden
+            students = Student.get_all(self.main_window.db)
                 
-            students = cursor.fetchall()
-            
+            # Nach Kurs filtern wenn nötig
+            if course_id and semester:
+                # Nur Schüler anzeigen die im ausgewählten Kurs sind
+                filtered_students = []
+                for student in students:
+                    courses = student.get_current_courses(self.main_window.db)
+                    if any(c['id'] == course_id for c in courses):
+                        filtered_students.append(student)
+                students = filtered_students
+
+            # Tabelle befüllen
             self.students_table.setRowCount(len(students))
             for row, student in enumerate(students):
                 # Name
                 self.students_table.setItem(
                     row, 0, 
-                    QTableWidgetItem(student['last_name'])
+                    QTableWidgetItem(student.last_name)
                 )
                 self.students_table.setItem(
                     row, 1, 
-                    QTableWidgetItem(student['first_name'])
+                    QTableWidgetItem(student.first_name)
                 )
                 
                 # ID als userData speichern
                 self.students_table.item(row, 0).setData(
                     Qt.ItemDataRole.UserRole, 
-                    student['id']
+                    student.id
                 )
                 
                 # Kurse laden und anzeigen
-                courses = self.get_student_courses(student['id'])
+                courses = student.get_current_courses(self.main_window.db)
+                course_names = [course['name'] for course in courses]
                 self.students_table.setItem(
                     row, 2,
-                    QTableWidgetItem(", ".join(courses))
+                    QTableWidgetItem(", ".join(course_names))
                 )
                 
         except Exception as e:
@@ -432,31 +353,6 @@ class StudentTab(QWidget):
                 "Fehler",
                 f"Fehler beim Laden der Schüler: {str(e)}"
             )
-
-
-    def get_student_courses(self, student_id: int) -> list[str]:
-        """Holt alle aktuellen Kurse eines Schülers"""
-        try:
-            semester = self.main_window.db.get_semester_dates()
-            if not semester:
-                return []
-                
-            cursor = self.main_window.db.execute(
-                """SELECT DISTINCT c.name 
-                FROM courses c
-                JOIN student_courses sc ON c.id = sc.course_id
-                JOIN semester_history sh ON sc.semester_id = sh.id
-                WHERE sc.student_id = ?
-                AND sh.start_date = ? AND sh.end_date = ?
-                ORDER BY c.name""",
-                (student_id, semester['semester_start'], semester['semester_end'])
-            )
-            
-            return [row['name'] for row in cursor.fetchall()]
-            
-        except Exception as e:
-            print(f"Fehler beim Laden der Kurse: {str(e)}")
-            return []
 
     def filter_students(self, text: str):
         """Filtert die Schülerliste basierend auf der Sucheingabe"""
@@ -484,34 +380,44 @@ class StudentTab(QWidget):
     def load_student_details(self, student_id: int):
         """Lädt alle Details für einen Schüler"""
         try:
-            # Hole Schülerdetails
-            cursor = self.main_window.db.execute(
-                "SELECT first_name, last_name FROM students WHERE id = ?",
-                (student_id,)
-            )
-            student = cursor.fetchone()
+            student = Student.get_by_id(self.main_window.db, student_id)
+            if not student:
+                raise ValueError("Student nicht gefunden")
             
-            # Hole Kurse des Schülers
-            courses = self.get_student_courses(student_id)
+            # Hole aktuelle Kurse
+            courses = student.get_current_courses(self.main_window.db)
             
             # Aktualisiere Header
-            header_text = f"{student['first_name']} {student['last_name']}"
+            header_text = student.get_full_name()
             if courses:
-                header_text += f" ({', '.join(courses)})"
+                course_names = [course['name'] for course in courses]
+                header_text += f" ({', '.join(course_names)})"
             self.student_header.setText(header_text)
             self.student_header.setVisible(True)
             
-            # Details laden
-            self.remarks_widget.current_student_id = student_id
+            # Lade Details
+            self.remarks_widget.current_student_id = student_id  
             self.remarks_widget.load_remarks(student_id)
             self.grades_widget.current_student_id = student_id
             self.grades_widget.load_grades(student_id)
-            self.analysis_widget.current_student_id = student_id
+            self.analysis_widget.current_student_id = student_id 
             self.analysis_widget.load_analysis(student_id)
             
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Fehler", 
+                "Fehler",
                 f"Fehler beim Laden der Schülerdetails: {str(e)}"
             )
+
+    def get_current_semester_id(self) -> int:
+        """Hilfsmethode um das aktuelle Semester zu bekommen"""
+        semester = self.main_window.db.get_semester_dates()
+        if not semester:
+            raise ValueError("Kein aktives Semester gefunden")
+
+        semester_data = self.main_window.db.get_semester_by_date(semester['semester_start'])
+        if not semester_data:
+            raise ValueError("Aktives Semester nicht gefunden")
+            
+        return semester_data['id']
