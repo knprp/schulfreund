@@ -80,9 +80,6 @@ class SchoolManagement(QMainWindow):
         """Initialisiert die Benutzeroberfläche"""
         # Tabs initialisieren
         self.setup_tabs()
-        
-        # Menüs einrichten
-        self.setup_menus()
 
     def setup_tabs(self):
         """Initialisiert alle Tab-Komponenten"""
@@ -126,11 +123,6 @@ class SchoolManagement(QMainWindow):
         """Handler für den '+ Button' im Kalender"""
         self.list_manager.add_day_lesson(self.calendarWidget.selectedDate())
 
-    def setup_menus(self):
-        """Richtet die Menüleiste ein"""
-        self.menuKurse.addAction("Neuer Kurs", self.course_tab.add_course)
-        self.menuKurse.addAction("Kurse anzeigen", 
-                                lambda: self.tabWidget.setCurrentWidget(self.tab_kurse))
 
     def on_date_selected(self, date):
         """Event-Handler für Kalenderauswahl"""

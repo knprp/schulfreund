@@ -228,58 +228,6 @@
     </widget>
    </widget>
   </widget>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>1043</width>
-     <height>29</height>
-    </rect>
-   </property>
-   <widget class="QMenu" name="menuDatei">
-    <property name="title">
-     <string>Datei</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuKalender">
-    <property name="title">
-     <string>Kalender</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuSch_ler">
-    <property name="title">
-     <string>Sch&amp;üler</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuKurse">
-    <property name="title">
-     <string>Kurse</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuSequenzen">
-    <property name="title">
-     <string>Se&amp;quenzen</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuF_cher">
-    <property name="title">
-     <string>F&amp;ächer</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuEinstellungen">
-    <property name="title">
-     <string>Einstellungen</string>
-    </property>
-   </widget>
-   <addaction name="menuDatei"/>
-   <addaction name="menuKalender"/>
-   <addaction name="menuKurse"/>
-   <addaction name="menuSch_ler"/>
-   <addaction name="menuSequenzen"/>
-   <addaction name="menuF_cher"/>
-   <addaction name="menuEinstellungen"/>
-  </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources>
