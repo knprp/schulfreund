@@ -77,6 +77,19 @@ class StudentTab(QWidget):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
 
+        # Neues Label für Schülerinfo
+        self.student_header = QLabel()
+        self.student_header.setStyleSheet("""
+            font-size: 16px;
+            font-weight: bold;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        """)
+        self.student_header.setVisible(False)  # Initial versteckt
+        right_layout.addWidget(self.student_header)
+
         self.detail_tabs = QTabWidget()
         
         # Tab 1: Bemerkungen
@@ -751,9 +764,35 @@ class StudentTab(QWidget):
 
     def load_student_details(self, student_id: int):
         """Lädt alle Details für einen Schüler"""
-        self.load_remarks(student_id)
-        self.load_grades(student_id)
-        self.load_analysis(student_id)
+        try:
+            # Hole Schülerdetails
+            cursor = self.main_window.db.execute(
+                "SELECT first_name, last_name FROM students WHERE id = ?",
+                (student_id,)
+            )
+            student = cursor.fetchone()
+            
+            # Hole Kurse des Schülers
+            courses = self.get_student_courses(student_id)
+            
+            # Aktualisiere Header
+            header_text = f"{student['first_name']} {student['last_name']}"
+            if courses:
+                header_text += f" ({', '.join(courses)})"
+            self.student_header.setText(header_text)
+            self.student_header.setVisible(True)
+            
+            # Restliche Details laden
+            self.load_remarks(student_id)
+            self.load_grades(student_id)
+            self.load_analysis(student_id)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Fehler",
+                f"Fehler beim Laden der Schülerdetails: {str(e)}"
+            )
 
     def load_remarks(self, student_id: int):
         """Lädt die Bemerkungen eines Schülers"""
