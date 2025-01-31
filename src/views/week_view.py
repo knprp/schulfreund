@@ -19,6 +19,9 @@ class WeekView(QWidget):
         self.setup_ui()
         self.setup_context_menu()
 
+        # Doppelklick aktivieren
+        self.table.doubleClicked.connect(self.on_cell_double_clicked)
+
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -242,6 +245,26 @@ class WeekView(QWidget):
             'Musik': QColor('#E5FFE5'),       # Hellgrün
         }
         return colors.get(subject, QColor('#FFFFFF'))  # Weiß als Standard
+
+    def on_cell_double_clicked(self, index):
+        """Handler für Doppelklick auf eine Zelle"""
+        try:
+            item = self.table.item(index.row(), index.column())
+            if item and item.data(Qt.ItemDataRole.UserRole):
+                lesson_id = item.data(Qt.ItemDataRole.UserRole)
+                
+                from src.views.dialogs.lesson_details_dialog import LessonDetailsDialog
+                dialog = LessonDetailsDialog(self.parent, lesson_id)
+                if dialog.exec():
+                    # Nach Schließen des Dialogs View aktualisieren
+                    self.update_view(self.week_navigator.current_week_start)
+                    
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Fehler",
+                f"Fehler beim Öffnen der Stundendetails: {str(e)}"
+            )
 
 
 
