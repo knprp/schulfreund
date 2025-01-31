@@ -1800,6 +1800,159 @@ class DatabaseManager:
         except Exception as e:
             raise Exception(f"Fehler bei der Notenberechnung: {str(e)}")
 
+    def get_student_course_grades(self, student_id: int) -> dict:
+        """Holt die Gesamtnoten eines Schülers für alle seine Kurse."""
+        try:
+            # Hole alle Kurse des Schülers
+            cursor = self.execute("""
+                SELECT DISTINCT c.id, c.name
+                FROM courses c
+                JOIN student_courses sc ON c.id = sc.course_id
+                WHERE sc.student_id = ?
+                ORDER BY c.name
+            """, (student_id,))
+            
+            courses = cursor.fetchall()
+            
+            # Berechne Noten für jeden Kurs
+            course_grades = {}
+            for course in courses:
+                final_grade = self.calculate_final_grade(student_id, course['id'])
+                if final_grade is not None:
+                    course_grades[course['id']] = {
+                        'name': course['name'],
+                        'final_grade': final_grade
+                    }
+                    
+            return course_grades
+            
+        except Exception as e:
+            print(f"DEBUG: Error in get_student_course_grades: {str(e)}")
+            raise#
+
+    def get_student_competency_grades(self, student_id: int) -> dict:
+        """Berechnet die Durchschnittsnoten pro Kompetenzbereich für jeden Kurs eines Schülers.
+        
+        Returns:
+            dict: {
+                'areas': ['Bereich1', 'Bereich2', ...],  # Alle vorkommenden Kompetenzbereiche
+                'grades': [  # Liste der Kurse mit ihren Kompetenznoten
+                    {
+                        'course_id': id,
+                        'course_name': name,
+                        'competencies': {
+                            'Bereich1': note,
+                            'Bereich2': note,
+                            ...
+                        }
+                    },
+                    ...
+                ]
+            }
+        """
+        try:
+            # Erst alle vorkommenden Kompetenzbereiche ermitteln
+            cursor = self.execute("""
+                SELECT DISTINCT comp.area
+                FROM assessments a
+                JOIN lessons l ON a.lesson_id = l.id
+                JOIN lesson_competencies lc ON l.id = lc.lesson_id
+                JOIN competencies comp ON lc.competency_id = comp.id
+                WHERE a.student_id = ?
+                ORDER BY comp.area
+            """, (student_id,))
+            
+            comp_areas = [row['area'] for row in cursor.fetchall()]
+            
+            # Dann die Noten pro Kurs und Kompetenzbereich holen
+            cursor = self.execute("""
+                SELECT 
+                    c.id as course_id,
+                    c.name as course_name,
+                    comp.area as comp_area,
+                    (SUM(a.grade * a.weight) / SUM(a.weight)) as avg_grade
+                FROM assessments a
+                JOIN courses c ON a.course_id = c.id
+                JOIN lessons l ON a.lesson_id = l.id
+                JOIN lesson_competencies lc ON l.id = lc.lesson_id
+                JOIN competencies comp ON lc.competency_id = comp.id
+                WHERE a.student_id = ?
+                GROUP BY c.id, c.name, comp.area
+                ORDER BY c.name, comp.area
+            """, (student_id,))
+            
+            # Ergebnisse strukturieren
+            grades_data = {}
+            for row in cursor.fetchall():
+                course_id = row['course_id']
+                if course_id not in grades_data:
+                    grades_data[course_id] = {
+                        'course_id': course_id,
+                        'course_name': row['course_name'],
+                        'competencies': {}
+                    }
+                grades_data[course_id]['competencies'][row['comp_area']] = row['avg_grade']
+            
+            return {
+                'areas': comp_areas,
+                'grades': list(grades_data.values())
+            }
+            
+        except Exception as e:
+            print(f"DEBUG: Error in get_student_competency_grades: {str(e)}")
+            raise
+
+    def get_student_assessment_type_grades(self, student_id: int, course_id: int) -> list:
+        """Holt die Durchschnittsnoten pro Assessment Type für einen bestimmten Kurs.
+        
+        Args:
+            student_id: ID des Schülers
+            course_id: ID des Kurses
+
+        Returns:
+            list: Liste von Dictionaries mit Assessment Type Informationen und Noten
+        """
+        try:
+            cursor = self.execute("""
+                WITH RECURSIVE TypeHierarchy AS (
+                    -- Root types
+                    SELECT 
+                        id, name, weight, parent_type_id,
+                        name as path,
+                        0 as level
+                    FROM assessment_types
+                    WHERE course_id = ? AND parent_type_id IS NULL
+                    
+                    UNION ALL
+                    
+                    -- Child types
+                    SELECT 
+                        t.id, t.name, t.weight, t.parent_type_id,
+                        th.path || ' > ' || t.name,
+                        th.level + 1
+                    FROM assessment_types t
+                    JOIN TypeHierarchy th ON t.parent_type_id = th.id
+                ),
+                TypeGrades AS (
+                    SELECT 
+                        th.*,
+                        ROUND(AVG(a.grade * a.weight) / AVG(a.weight), 2) as average_grade,
+                        COUNT(a.id) as grade_count
+                    FROM TypeHierarchy th
+                    LEFT JOIN assessments a ON th.id = a.assessment_type_id 
+                        AND a.student_id = ?
+                    GROUP BY th.id
+                )
+                SELECT * FROM TypeGrades
+                ORDER BY path
+            """, (course_id, student_id))
+            
+            return cursor.fetchall()
+            
+        except Exception as e:
+            print(f"DEBUG: Error in get_student_assessment_type_grades: {str(e)}")
+            raise
+        
     def mark_student_absent(self, lesson_id: int, student_id: int) -> None:
         """Markiert einen Schüler als abwesend für eine Stunde."""
         try:
