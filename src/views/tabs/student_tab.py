@@ -9,6 +9,8 @@ import math
 
 from src.views.dialogs.student_dialog import StudentDialog
 from src.views.student.remarks_widget import RemarksWidget
+from src.views.student.grades_widget import GradesWidget
+
 
 
 class StudentTab(QWidget):
@@ -99,7 +101,7 @@ class StudentTab(QWidget):
 
         
         # Tab 2: Notenübersicht
-        self.grades_widget = self.setup_grades_tab()
+        self.grades_widget = GradesWidget(self)
         self.detail_tabs.addTab(self.grades_widget, "Noten")
         
         # Tab 3: Notenanalyse
@@ -113,60 +115,6 @@ class StudentTab(QWidget):
         layout.addWidget(right_widget, 2)  # Stretch-Faktor 2
 
         self.refresh_all()
-
-    def setup_remarks_tab(self) -> QWidget:
-        """Erstellt den Tab für Bemerkungen"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        # Tabelle für Bemerkungen
-        self.remarks_table = QTableWidget()
-        self.remarks_table.setColumnCount(3)
-        self.remarks_table.setHorizontalHeaderLabels(["Datum", "Typ", "Bemerkung"])
-        self.remarks_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.remarks_table)
-
-        # Buttons für Bemerkungen
-        button_layout = QHBoxLayout()
-        
-        add_remark_btn = QPushButton("Bemerkung hinzufügen")
-        add_remark_btn.clicked.connect(self.add_remark)
-        button_layout.addWidget(add_remark_btn)
-        
-        delete_remark_btn = QPushButton("Bemerkung löschen")
-        delete_remark_btn.clicked.connect(self.delete_remark)
-        button_layout.addWidget(delete_remark_btn)
-        
-        layout.addLayout(button_layout)
-
-        return widget
-
-    def setup_grades_tab(self) -> QWidget:
-        """Erstellt den Tab für die detaillierte Notenübersicht"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        # Tabelle für Einzelnoten
-        self.grades_table = QTableWidget()
-        self.grades_table.setColumnCount(6)
-        self.grades_table.setHorizontalHeaderLabels([
-            "Datum", "Kurs", "Typ", "Note", "Thema", "Bemerkung"
-        ])
-        
-        # Spaltenbreiten konfigurieren
-        header = self.grades_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Datum
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Kurs
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Typ
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Note
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Thema
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Bemerkung
-
-        self.grades_table.setColumnWidth(1, 120)  # Kurs
-        self.grades_table.setColumnWidth(2, 100)  # Typ
-
-        layout.addWidget(self.grades_table)
-        return widget
 
     def setup_analysis_tab(self) -> QWidget:
         widget = QWidget()
@@ -657,65 +605,6 @@ class StudentTab(QWidget):
                 f"Fehler beim Laden der Schüler: {str(e)}"
             )
 
-    def add_remark(self):
-        """Öffnet den Dialog zum Hinzufügen einer Bemerkung"""
-        try:
-            if not self.current_student_id:
-                return
-                
-            from src.views.dialogs.remark_dialog import RemarkDialog
-            dialog = RemarkDialog(self.main_window)
-            
-            if dialog.exec():
-                data = dialog.get_data()
-                self.main_window.db.execute(
-                    """INSERT INTO student_remarks 
-                    (student_id, type, remark_text)
-                    VALUES (?, ?, ?)""",
-                    (self.current_student_id, data['type'], data['text'])
-                )
-                self.load_remarks(self.current_student_id)
-                
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Fehler",
-                f"Fehler beim Hinzufügen der Bemerkung: {str(e)}"
-            )
-
-    def delete_remark(self):
-        """Löscht die ausgewählte Bemerkung"""
-        try:
-            selected = self.remarks_table.selectedItems()
-            if not selected:
-                return
-                
-            row = selected[0].row()
-            date = self.remarks_table.item(row, 0).text()
-            text = self.remarks_table.item(row, 2).text()
-            
-            reply = QMessageBox.question(
-                self,
-                'Bemerkung löschen',
-                f'Möchten Sie die Bemerkung vom {date} wirklich löschen?',
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                self.main_window.db.execute(
-                    """DELETE FROM student_remarks 
-                    WHERE student_id = ? AND created_at = ?""",
-                    (self.current_student_id, date)
-                )
-                self.load_remarks(self.current_student_id)
-                
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Fehler",
-                f"Fehler beim Löschen der Bemerkung: {str(e)}"
-            )
 
     def get_student_courses(self, student_id: int) -> list[str]:
         """Holt alle aktuellen Kurse eines Schülers"""
@@ -785,9 +674,10 @@ class StudentTab(QWidget):
             self.student_header.setVisible(True)
             
             # Details laden
-            self.remarks_widget.current_student_id = student_id  # ID setzen
+            self.remarks_widget.current_student_id = student_id
             self.remarks_widget.load_remarks(student_id)
-            self.load_grades(student_id)
+            self.grades_widget.current_student_id = student_id
+            self.grades_widget.load_grades(student_id)
             self.load_analysis(student_id)
             
         except Exception as e:
@@ -797,113 +687,6 @@ class StudentTab(QWidget):
                 f"Fehler beim Laden der Schülerdetails: {str(e)}"
             )
 
-    def load_remarks(self, student_id: int):
-        """Lädt die Bemerkungen eines Schülers"""
-        try:
-            cursor = self.main_window.db.execute(
-                """SELECT created_at, type, remark_text 
-                FROM student_remarks
-                WHERE student_id = ?
-                ORDER BY created_at DESC""",
-                (student_id,)
-            )
-            remarks = cursor.fetchall()
-            
-            self.remarks_table.setRowCount(len(remarks))
-            for row, remark in enumerate(remarks):
-                self.remarks_table.setItem(
-                    row, 0,
-                    QTableWidgetItem(remark['created_at'])
-                )
-                self.remarks_table.setItem(
-                    row, 1,
-                    QTableWidgetItem(remark['type'])
-                )
-                self.remarks_table.setItem(
-                    row, 2,
-                    QTableWidgetItem(remark['remark_text'])
-                )
-                
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Fehler",
-                f"Fehler beim Laden der Bemerkungen: {str(e)}"
-            )
-
-    def load_grades(self, student_id: int):
-        """Lädt die Einzelnoten eines Schülers"""
-        try:
-            cursor = self.main_window.db.execute(
-                """SELECT 
-                    a.date,
-                    c.name as course_name,
-                    at.name as type_name,
-                    a.grade,
-                    COALESCE(a.topic, '') as topic,
-                    COALESCE(a.comment, '') as comment
-                FROM assessments a
-                JOIN courses c ON a.course_id = c.id
-                JOIN assessment_types at ON a.assessment_type_id = at.id
-                WHERE a.student_id = ?
-                ORDER BY a.date DESC""",
-                (student_id,)
-            )
-            grades = cursor.fetchall()
-            
-            self.grades_table.setRowCount(len(grades))
-            for row, grade in enumerate(grades):
-                # Datum
-                self.grades_table.setItem(
-                    row, 0,
-                    QTableWidgetItem(grade['date'])
-                )
-                # Kurs
-                self.grades_table.setItem(
-                    row, 1,
-                    QTableWidgetItem(grade['course_name'])
-                )
-                # Typ
-                self.grades_table.setItem(
-                    row, 2,
-                    QTableWidgetItem(grade['type_name'])
-                )
-                
-                # Note mit Färbung
-                grade_item = QTableWidgetItem(str(grade['grade']))
-                grade_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                
-                # Farbgebung basierend auf Note
-                grade_value = float(grade['grade'])
-                if grade_value <= 2.0:
-                    grade_item.setBackground(QColor(200, 255, 200))
-                elif grade_value <= 3.0:
-                    grade_item.setBackground(QColor(220, 255, 220))
-                elif grade_value <= 4.0:
-                    grade_item.setBackground(QColor(255, 255, 200))
-                elif grade_value <= 5.0:
-                    grade_item.setBackground(QColor(255, 220, 220))
-                else:
-                    grade_item.setBackground(QColor(255, 200, 200))
-                
-                self.grades_table.setItem(row, 3, grade_item)
-                
-                # Thema und Bemerkung
-                self.grades_table.setItem(
-                    row, 4,
-                    QTableWidgetItem(grade['topic'])
-                )
-                self.grades_table.setItem(
-                    row, 5,
-                    QTableWidgetItem(grade['comment'])
-                )
-                
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Fehler",
-                f"Fehler beim Laden der Noten: {str(e)}"
-            )
 
     def load_analysis(self, student_id: int):
         """Lädt und zeigt die Notenanalyse für einen Schüler"""
