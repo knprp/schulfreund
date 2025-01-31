@@ -127,16 +127,18 @@ class StudentTab(QWidget):
         return widget
 
     def setup_grades_tab(self) -> QWidget:
-        """Erstellt den Tab für die Notenübersicht"""
+        """Erstellt den Tab für die detaillierte Notenübersicht"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # Tabelle für Noten
+        # Tabelle für Einzelnoten
         self.grades_table = QTableWidget()
-        self.grades_table.setColumnCount(6)  # Erhöht von 5 auf 6
+        self.grades_table.setColumnCount(6)
         self.grades_table.setHorizontalHeaderLabels([
-            "Datum", "Kurs", "Typ", "Note", "Thema", "Bemerkung"  # Neue Spalte
+            "Datum", "Kurs", "Typ", "Note", "Thema", "Bemerkung"
         ])
+        
+        # Spaltenbreiten konfigurieren
         header = self.grades_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Datum
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Kurs
@@ -145,7 +147,6 @@ class StudentTab(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Thema
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Bemerkung
 
-        # Setze fixe Breiten für Kurs und Typ
         self.grades_table.setColumnWidth(1, 120)  # Kurs
         self.grades_table.setColumnWidth(2, 100)  # Typ
 
@@ -153,7 +154,6 @@ class StudentTab(QWidget):
         return widget
 
     def setup_analysis_tab(self) -> QWidget:
-        """Erstellt den Tab für die Notenanalyse"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
@@ -169,74 +169,163 @@ class StudentTab(QWidget):
         avg_layout.addWidget(self.avg_label)
         stats_layout.addWidget(avg_box)
         
-        # Beste Note
-        best_box = QWidget()
-        best_layout = QVBoxLayout(best_box)
-        best_layout.addWidget(QLabel("<b>Beste Note</b>"))
-        self.best_label = QLabel("-")
-        self.best_label.setStyleSheet("font-size: 24px;")
-        best_layout.addWidget(self.best_label)
-        stats_layout.addWidget(best_box)
-        
-        # Schlechteste Note
-        worst_box = QWidget()
-        worst_layout = QVBoxLayout(worst_box)
-        worst_layout.addWidget(QLabel("<b>Schlechteste Note</b>"))
-        self.worst_label = QLabel("-")
-        self.worst_label.setStyleSheet("font-size: 24px;")
-        worst_layout.addWidget(self.worst_label)
-        stats_layout.addWidget(worst_box)
-
         layout.addLayout(stats_layout)
+
+        # Assessment Types Tabelle
+        layout.addWidget(QLabel("<b>Noten nach Bewertungstyp</b>"))
+        self.type_grades_table = QTableWidget()
+        self.type_grades_table.setColumnCount(3)
+        self.type_grades_table.setHorizontalHeaderLabels([
+            "Bewertungstyp", "Durchschnitt", "Gewichtung"
+        ])
         
+        header = self.type_grades_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Typ
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # Durchschnitt
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)    # Gewichtung
+        
+        self.type_grades_table.setColumnWidth(1, 100)  # Durchschnitt
+        self.type_grades_table.setColumnWidth(2, 100)  # Gewichtung
+        
+        layout.addWidget(self.type_grades_table)
+
         # Notenverteilung pro Kurs
         layout.addWidget(QLabel("<b>Notenverteilung pro Kurs</b>"))
         self.course_grades_table = QTableWidget()
-        self.course_grades_table.setColumnCount(4)
+        self.course_grades_table.setColumnCount(6)
         self.course_grades_table.setHorizontalHeaderLabels([
-            "Kurs", "Durchschnitt", "Beste", "Schlechteste"
+            "Kurs", "Gesamt", "Fachkompetenz", "Methodenkompetenz",
+            "Sozialkompetenz", "Selbstkompetenz"
         ])
-        self.course_grades_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
+        
+        header = self.course_grades_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Kurs
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Gesamt
+        for i in range(2, 6):  # Kompetenzbereiche
+            header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
+
+        self.course_grades_table.setColumnWidth(0, 120)  # Kurs
+        self.course_grades_table.setColumnWidth(1, 80)   # Gesamt
+
         layout.addWidget(self.course_grades_table)
 
-        # Radar/Polar Chart
+        # Radar Chart
         layout.addWidget(QLabel("<b>Kompetenzbereiche</b>"))
-        
-        # Chart erstellen
         self.radar_chart = QPolarChart()
         self.radar_series = QSplineSeries()
-        self.radar_series.setName("Durchschnittsnote")
-        
-        # Achsen
-        self.angular_axis = QCategoryAxis()
-        self.radial_axis = QValueAxis()
-        
-        # Achseneigenschaften setzen
-        self.radial_axis.setReverse(True)  # 6 innen, 1 außen
-        self.radial_axis.setTitleText("Note")
-        self.radial_axis.setLabelFormat("%.1f")
-        
-        # Chart-Eigenschaften
-        self.radar_chart.legend().setVisible(True)
-        self.radar_chart.setTitle("Leistung nach Kompetenzbereichen")
-        
-        # Achsen hinzufügen
-        self.radar_chart.addAxis(self.angular_axis, QPolarChart.PolarOrientation.PolarOrientationAngular)
-        self.radar_chart.addAxis(self.radial_axis, QPolarChart.PolarOrientation.PolarOrientationRadial)
-        
-        self.radar_chart.addSeries(self.radar_series)
-        self.radar_series.attachAxis(self.angular_axis)
-        self.radar_series.attachAxis(self.radial_axis)
-        
-        # ChartView als Instanzvariable speichern
         self.chart_view = QChartView(self.radar_chart)
         self.chart_view.setMinimumHeight(400)
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         layout.addWidget(self.chart_view)
 
         return widget
+        
+    def update_analysis_ui(self, course_grades, competency_data):
+        """Aktualisiert die UI mit den berechneten Noten"""
+        # Spalten für die Tabelle einrichten
+        num_columns = 2 + len(competency_data['areas'])  # Kurs + Gesamt + Kompetenzbereiche
+        self.course_grades_table.setColumnCount(num_columns)
+        
+        # Spaltenüberschriften
+        headers = ['Kurs', 'Gesamt'] + competency_data['areas']
+        self.course_grades_table.setHorizontalHeaderLabels(headers)
+        
+        # Spaltenbreiten
+        header = self.course_grades_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Kurs
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Gesamt
+        for i in range(2, num_columns):  # Kompetenzbereiche
+            header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
+
+        self.course_grades_table.setColumnWidth(0, 120)  # Kurs
+        self.course_grades_table.setColumnWidth(1, 80)   # Gesamt
+
+        # Zeilen füllen
+        self.course_grades_table.setRowCount(len(competency_data['grades']))
+        
+        for row, course_data in enumerate(competency_data['grades']):
+            # Kursname
+            self.course_grades_table.setItem(
+                row, 0, 
+                QTableWidgetItem(course_data['course_name'])
+            )
+            
+            # Gesamtnote
+            course_grade = course_grades.get(course_data['course_id'], {}).get('final_grade')
+            grade_item = QTableWidgetItem(str(round(course_grade, 2)) if course_grade else "-")
+            grade_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.course_grades_table.setItem(row, 1, grade_item)
+            
+            # Kompetenzbereiche
+            for col, area in enumerate(competency_data['areas'], start=2):
+                grade = course_data['competencies'].get(area)
+                if grade is not None:
+                    item = QTableWidgetItem(f"{round(grade, 2)}")
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    
+                    # Farbliche Hervorhebung
+                    grade_value = float(grade)
+                    if grade_value <= 2.0:
+                        item.setBackground(QColor(200, 255, 200))
+                    elif grade_value <= 3.0:
+                        item.setBackground(QColor(220, 255, 220))
+                    elif grade_value <= 4.0:
+                        item.setBackground(QColor(255, 255, 200))
+                    elif grade_value <= 5.0:
+                        item.setBackground(QColor(255, 220, 220))
+                    else:
+                        item.setBackground(QColor(255, 200, 200))
+                else:
+                    item = QTableWidgetItem("-")
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    
+                self.course_grades_table.setItem(row, col, item)
+
+        # Assessment Types laden und anzeigen
+        for course_id in course_grades.keys():  # Wir nehmen den ersten Kurs
+            type_grades = self.main_window.db.get_student_assessment_type_grades(
+                self.current_student_id, course_id
+            )
+            self.update_type_grades_table(type_grades)
+            break  # Erstmal nur für einen Kurs
+
+    def update_type_grades_table(self, type_grades: list):
+        """Aktualisiert die Assessment Type Tabelle"""
+        self.type_grades_table.setRowCount(len(type_grades))
+        
+        for row, grade_data in enumerate(type_grades):
+            # Name mit Einrückung je nach Level
+            indent = "    " * grade_data['level']
+            name_item = QTableWidgetItem(indent + grade_data['name'])
+            self.type_grades_table.setItem(row, 0, name_item)
+            
+            # Durchschnitt
+            if grade_data['average_grade'] is not None:
+                avg = round(grade_data['average_grade'], 2)
+                avg_item = QTableWidgetItem(str(avg))
+                avg_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                
+                # Farbliche Hervorhebung wie bei den anderen Noten
+                if avg <= 2.0:
+                    avg_item.setBackground(QColor(200, 255, 200))
+                elif avg <= 3.0:
+                    avg_item.setBackground(QColor(220, 255, 220))
+                elif avg <= 4.0:
+                    avg_item.setBackground(QColor(255, 255, 200))
+                elif avg <= 5.0:
+                    avg_item.setBackground(QColor(255, 220, 220))
+                else:
+                    avg_item.setBackground(QColor(255, 200, 200))
+            else:
+                avg_item = QTableWidgetItem("-")
+                avg_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            self.type_grades_table.setItem(row, 1, avg_item)
+            
+            # Gewichtung
+            weight_item = QTableWidgetItem(f"{grade_data['weight']}")
+            weight_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.type_grades_table.setItem(row, 2, weight_item)
 
     def refresh_students(self):
         """Aktualisiert die Schülerliste"""
@@ -701,7 +790,7 @@ class StudentTab(QWidget):
             )
 
     def load_grades(self, student_id: int):
-        """Lädt die Noten eines Schülers"""
+        """Lädt die Einzelnoten eines Schülers"""
         try:
             cursor = self.main_window.db.execute(
                 """SELECT 
@@ -745,24 +834,23 @@ class StudentTab(QWidget):
                 # Farbgebung basierend auf Note
                 grade_value = float(grade['grade'])
                 if grade_value <= 2.0:
-                    grade_item.setBackground(QColor(200, 255, 200))  # Helles Grün
+                    grade_item.setBackground(QColor(200, 255, 200))
                 elif grade_value <= 3.0:
-                    grade_item.setBackground(QColor(220, 255, 220))  # Sehr helles Grün
+                    grade_item.setBackground(QColor(220, 255, 220))
                 elif grade_value <= 4.0:
-                    grade_item.setBackground(QColor(255, 255, 200))  # Helles Gelb
+                    grade_item.setBackground(QColor(255, 255, 200))
                 elif grade_value <= 5.0:
-                    grade_item.setBackground(QColor(255, 220, 220))  # Helles Rot
+                    grade_item.setBackground(QColor(255, 220, 220))
                 else:
-                    grade_item.setBackground(QColor(255, 200, 200))  # Kräftigeres Rot
+                    grade_item.setBackground(QColor(255, 200, 200))
                 
                 self.grades_table.setItem(row, 3, grade_item)
                 
-                # Thema
+                # Thema und Bemerkung
                 self.grades_table.setItem(
                     row, 4,
                     QTableWidgetItem(grade['topic'])
                 )
-                # Bemerkung
                 self.grades_table.setItem(
                     row, 5,
                     QTableWidgetItem(grade['comment'])
@@ -779,107 +867,30 @@ class StudentTab(QWidget):
         """Lädt und zeigt die Notenanalyse für einen Schüler"""
         try:
             self.current_student_id = student_id
-            
-            # Gesamtstatistik mit gewichtetem Durchschnitt
-            cursor = self.main_window.db.execute(
-                """SELECT 
-                    ROUND(SUM(grade * weight) / SUM(weight), 2) as average,
-                    MIN(grade) as best,
-                    MAX(grade) as worst
-                    FROM assessments
-                    WHERE student_id = ?""", 
-                (student_id,)
-            )
-            overall_stats = cursor.fetchone()
-            
-            # Labels aktualisieren
-            if overall_stats and overall_stats['average']:
-                self.avg_label.setText(f"{overall_stats['average']}")
-                self.best_label.setText(f"{overall_stats['best']}")
-                self.worst_label.setText(f"{overall_stats['worst']}")
-            else:
-                self.avg_label.setText("-")
-                self.best_label.setText("-")
-                self.worst_label.setText("-")
 
-            # Statistik pro Kurs mit gewichtetem Durchschnitt
-            cursor = self.main_window.db.execute(
-                """SELECT 
-                    c.name as course_name,
-                    ROUND(SUM(a.grade * a.weight) / SUM(a.weight), 2) as average,
-                    MIN(a.grade) as best,
-                    MAX(a.grade) as worst,
-                    COUNT(a.id) as count
-                    FROM assessments a
-                    JOIN courses c ON a.course_id = c.id
-                    WHERE a.student_id = ?
-                    GROUP BY c.id
-                    HAVING count > 0
-                    ORDER BY c.name""",
-                (student_id,)
-            )
-            course_stats = cursor.fetchall()
+            # Hole Daten aus dem DB-Manager
+            course_grades = self.main_window.db.get_student_course_grades(student_id)
+            course_competencies = self.main_window.db.get_student_competency_grades(student_id)
+
+            # Update UI
+            self.update_analysis_ui(course_grades, course_competencies)
             
-            # Tabelle aktualisieren
-            self.course_grades_table.setRowCount(len(course_stats))
-            for row, stats in enumerate(course_stats):
-                self.course_grades_table.setItem(
-                    row, 0,
-                    QTableWidgetItem(stats['course_name'])
-                )
-                self.course_grades_table.setItem(
-                    row, 1,
-                    QTableWidgetItem(str(stats['average']))
-                )
-                self.course_grades_table.setItem(
-                    row, 2,
-                    QTableWidgetItem(str(stats['best']))
-                )
-                self.course_grades_table.setItem(
-                    row, 3,
-                    QTableWidgetItem(str(stats['worst']))
-                )
-
-                # Formatierung der Noten
-                for col in range(1, 4):
-                    item = self.course_grades_table.item(row, col)
-                    if item:  # Sicherheitscheck
-                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            # Debug-Ausgabe für den Radar-Chart
-            self.load_competency_analysis(student_id)
-            print("DEBUG: Points in series:", [
-                (p.x(), p.y()) for p in self.radar_series.points()
-            ])
+            # Radar Chart aktualisieren
+            self.load_competency_analysis(student_id)  # Diese Zeile fehlte!
 
         except Exception as e:
-            print(f"DEBUG: Error in load_analysis: {str(e)}")  # Debug-Ausgabe
+            print(f"DEBUG Analysis Error: {str(e)}")
             QMessageBox.critical(
-                self,
-                "Fehler",
-                f"Fehler bei der Notenanalyse: {str(e)}"
+                self, "Fehler", f"Fehler bei der Notenanalyse: {str(e)}"
             )
 
     def load_competency_analysis(self, student_id: int):
         try:
-            cursor = self.main_window.db.execute(
-                """SELECT 
-                    c.area as competency_area,
-                    ROUND(SUM(a.grade * a.weight) / SUM(a.weight), 2) as average_grade,
-                    COUNT(*) as count
-                FROM assessments a
-                JOIN lessons l ON a.lesson_id = l.id
-                JOIN lesson_competencies lc ON l.id = lc.lesson_id
-                JOIN competencies c ON lc.competency_id = c.id
-                WHERE a.student_id = ?
-                GROUP BY c.area""",
-                (student_id,)
-            )
-            competency_data = [dict(row) for row in cursor.fetchall()]
-            print("DEBUG: Competency Data:", competency_data)
-
-            if len(competency_data) < 3:
-                print("DEBUG: Not enough data points for radar chart")
+            # Hole die Kompetenzdaten über die neue Methode
+            competency_data = self.main_window.db.get_student_competency_grades(student_id)
+            
+            if not competency_data['areas']:
+                print("DEBUG: No competency areas found")
                 return
 
             # Chart komplett neu erstellen
@@ -889,8 +900,8 @@ class StudentTab(QWidget):
 
             # Visuelle Verbesserungen
             pen = QPen()
-            pen.setWidth(3)  # Dickere Linie
-            pen.setColor(QColor("#1e88e5"))  # Schönes Blau
+            pen.setWidth(3)
+            pen.setColor(QColor("#1e88e5"))
             self.radar_series.setPen(pen)
             
             # Fläche füllen
@@ -909,41 +920,56 @@ class StudentTab(QWidget):
             self.radial_axis.setTitleText("Note")
             self.radial_axis.setLabelFormat("%.1f")
 
-            # Radiale Achse (Noten)
-            self.radial_axis.setRange(1, 6)  
-            self.radial_axis.setReverse(True)
-            self.radial_axis.setTitleText("Note")
-            self.radial_axis.setLabelFormat("%.1f")
-
             # Grid-Linien konfigurieren
-            self.radial_axis.setMinorTickCount(1)  # Eine Zwischenlinie pro Hauptlinie
-            self.radial_axis.setGridLineVisible(True)  # Hauptlinien anzeigen
-            self.radial_axis.setMinorGridLineVisible(True)  # Zwischenlinien anzeigen
+            self.radial_axis.setMinorTickCount(1)
+            self.radial_axis.setGridLineVisible(True)
+            self.radial_axis.setMinorGridLineVisible(True)
 
             # Grid-Linien-Style anpassen
-            major_grid_pen = QPen(QColor("#E0E0E0"))  # Hellgrau für Hauptlinien
+            major_grid_pen = QPen(QColor("#E0E0E0"))
             major_grid_pen.setWidth(1)
             self.radial_axis.setGridLinePen(major_grid_pen)
 
-            minor_grid_pen = QPen(QColor("#F5F5F5"))  # Sehr hellgrau für Zwischenlinien
+            minor_grid_pen = QPen(QColor("#F5F5F5"))
             minor_grid_pen.setWidth(1)
             self.radial_axis.setMinorGridLinePen(minor_grid_pen)
 
-            # Auch für die Winkel-Achse Grid-Linien aktivieren
+            # Winkel-Achse Grid-Linien
             self.angular_axis.setGridLineVisible(True)
             self.angular_axis.setGridLinePen(major_grid_pen)
 
-            # Füge Punkte hinzu - jetzt im korrekten Format für QPolarChart
-            angle_step = 360.0 / len(competency_data)
-            for i, data in enumerate(competency_data):
-                angle = i * angle_step
-                self.radar_series.append(angle, data['average_grade'])
-                self.angular_axis.append(data['competency_area'], angle)
-                print(f"DEBUG: Adding point - Angle: {angle}, Value: {data['average_grade']}")
+            # Punkte berechnen und hinzufügen
+            num_areas = len(competency_data['areas'])
+            angle_step = 360.0 / num_areas
 
-            # Schließe den Kreis
-            self.radar_series.append(360.0, competency_data[0]['average_grade'])
-            
+            # Berechne Durchschnitt pro Kompetenzbereich über alle Kurse
+            area_averages = {}
+            for course in competency_data['grades']:
+                for area, grade in course['competencies'].items():
+                    if area not in area_averages:
+                        area_averages[area] = {'sum': 0.0, 'count': 0}
+                    area_averages[area]['sum'] += grade
+                    area_averages[area]['count'] += 1
+
+            print("DEBUG: Area averages:", area_averages)  # Debug output
+
+            # Punkte zum Chart hinzufügen
+            for i, area in enumerate(competency_data['areas']):
+                angle = i * angle_step
+                avg = (area_averages[area]['sum'] / area_averages[area]['count'] 
+                    if area_averages[area]['count'] > 0 else 0)
+                
+                print(f"DEBUG: Adding point - Area: {area}, Angle: {angle}, Value: {avg}")  # Debug
+                
+                if avg > 0:  # Nur Punkte hinzufügen wenn es einen Wert gibt
+                    self.radar_series.append(angle, avg)
+                    self.angular_axis.append(area, angle)
+
+            # Schließe den Kreis wenn es Daten gibt
+            if self.radar_series.count() > 0:
+                first_point = self.radar_series.at(0)
+                self.radar_series.append(360.0, first_point.y())
+
             # Chart aufbauen
             self.radar_chart.addAxis(self.angular_axis, QPolarChart.PolarOrientation.PolarOrientationAngular)
             self.radar_chart.addAxis(self.radial_axis, QPolarChart.PolarOrientation.PolarOrientationRadial)
@@ -958,9 +984,5 @@ class StudentTab(QWidget):
             ])
 
         except Exception as e:
-            print("DEBUG: Exception:", str(e))
-            QMessageBox.critical(
-                self,
-                "Fehler",
-                f"Fehler beim Laden der Kompetenzanalyse: {str(e)}"
-            )
+            print("DEBUG: Exception in load_competency_analysis:", str(e))
+            raise
