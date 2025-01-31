@@ -78,23 +78,31 @@ class AnalysisWidget(QWidget):
         layout.addWidget(self.chart_view)
 
     def load_analysis(self, student_id: int):
-        """Lädt und zeigt die Notenanalyse für einen Schüler"""
         try:
             self.current_student_id = student_id
+            # Reset all displays
+            self.type_grades_table.setRowCount(0)
+            self.course_grades_table.setRowCount(0)
+            self.radar_chart.removeAllSeries()
 
-            # Hole Daten aus dem DB-Manager
+            # Get data
             course_grades = self.main_window.db.get_student_course_grades(student_id)
             course_competencies = self.main_window.db.get_student_competency_grades(student_id)
 
-            # Update UI
-            self.update_tables(course_grades, course_competencies)
-            self.update_radar_chart(course_competencies)
+            # Only update if there's data
+            if course_grades and any(grade.get('final_grade') is not None for grade in course_grades.values()):
+                self.update_tables(course_grades, course_competencies)
+                self.update_radar_chart(course_competencies)
 
         except Exception as e:
             print(f"DEBUG Analysis Error: {str(e)}")
             raise
 
     def update_tables(self, course_grades, competency_data):
+        # Reset tables first
+        self.type_grades_table.setRowCount(0)
+        self.course_grades_table.setRowCount(0)
+
         """Aktualisiert die Tabellen mit den berechneten Noten"""
         # Spalten für die Tabelle einrichten
         num_columns = 2 + len(competency_data['areas'])
@@ -140,6 +148,18 @@ class AnalysisWidget(QWidget):
             )
             self.update_type_grades_table(type_grades)
             break  # Erstmal nur für einen Kurs
+        
+            # Only show type grades if we have any grades
+        has_grades = False
+        for course_id, course_data in course_grades.items():
+            if course_data.get('final_grade') is not None:
+                type_grades = self.main_window.db.get_student_assessment_type_grades(
+                    self.current_student_id, course_id
+                )
+                if type_grades:
+                    self.update_type_grades_table(type_grades)
+                    has_grades = True
+                    break
 
     def update_type_grades_table(self, type_grades: list):
         """Aktualisiert die Assessment Type Tabelle"""

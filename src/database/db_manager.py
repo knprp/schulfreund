@@ -1766,6 +1766,16 @@ class DatabaseManager:
     def calculate_final_grade(self, student_id: int, course_id: int) -> float:
         """Berechnet die Gesamtnote eines Schülers in einem Kurs."""
         try:
+        # First check if student has any grades at all
+            cursor = self.execute(
+                """SELECT COUNT(*) as count 
+                FROM assessments 
+                WHERE student_id = ? AND course_id = ?""",
+                (student_id, course_id)
+            )
+            if cursor.fetchone()['count'] == 0:
+                return None
+            
             # Hole alle Bewertungstypen und deren Gewichtungen
             types = self.get_assessment_types(course_id)
             if not types:
