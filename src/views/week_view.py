@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem, QHeaderVie
                            QVBoxLayout, QMenu, QStyledItemDelegate, QMessageBox, QStyle)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QBrush, QTextDocument, QAbstractTextDocumentLayout
+
 from .week_navigator import WeekNavigator
 
 class WeekView(QWidget):
@@ -36,7 +37,6 @@ class WeekView(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         
         # HTML-Delegate setzen
-        from PyQt6.QtGui import QTextDocument, QAbstractTextDocumentLayout 
         self.table.setItemDelegate(HTMLDelegate(self.table))
         
         self.table.setColumnCount(5)
@@ -62,6 +62,7 @@ class WeekView(QWidget):
             }
         """)
         layout.addWidget(self.table)
+        self.update_view(self.week_navigator.current_week_start)
 
     def update_time_slots(self):
         """Aktualisiert die Zeilen und Zeitslots basierend auf den Einstellungen"""
