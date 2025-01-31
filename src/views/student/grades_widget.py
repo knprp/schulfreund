@@ -33,6 +33,9 @@ class GradesWidget(QWidget):
         self.grades_table.setColumnWidth(1, 120)  # Kurs
         self.grades_table.setColumnWidth(2, 100)  # Typ
 
+        # Doppelklick-Handler hinzufügen
+        self.grades_table.itemDoubleClicked.connect(self.on_grade_double_clicked)
+
         layout.addWidget(self.grades_table)
 
     def load_grades(self, student_id: int):
@@ -108,4 +111,33 @@ class GradesWidget(QWidget):
                 self,
                 "Fehler",
                 f"Fehler beim Laden der Noten: {str(e)}"
+            )
+
+    def on_grade_double_clicked(self, item):
+        """Öffnet den LessonDetailsDialog für die ausgewählte Note"""
+        try:
+            row = item.row()
+            cursor = self.main_window.db.execute(
+                """SELECT lesson_id 
+                FROM assessments
+                WHERE student_id = ? 
+                AND date = ?
+                LIMIT 1""",
+                (self.current_student_id, self.grades_table.item(row, 0).text())
+            )
+            result = cursor.fetchone()
+            
+            if result and result['lesson_id']:
+                from src.views.dialogs.lesson_details_dialog import LessonDetailsDialog
+                dialog = LessonDetailsDialog(self.main_window, result['lesson_id'])
+                # Zum Schüler-Tab wechseln
+                dialog.tab_widget.setCurrentIndex(1)
+                if dialog.exec():
+                    # Noten nach Dialog-Schluss aktualisieren
+                    self.load_grades(self.current_student_id)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Fehler", 
+                f"Fehler beim Öffnen der Stundendetails: {str(e)}"
             )
