@@ -8,6 +8,7 @@ from PyQt6.QtGui import QPen, QColor, QPainter, QBrush
 import math
 
 from src.views.dialogs.student_dialog import StudentDialog
+from src.views.student.remarks_widget import RemarksWidget
 
 
 class StudentTab(QWidget):
@@ -93,8 +94,9 @@ class StudentTab(QWidget):
         self.detail_tabs = QTabWidget()
         
         # Tab 1: Bemerkungen
-        self.remarks_widget = self.setup_remarks_tab()
+        self.remarks_widget = RemarksWidget(self)
         self.detail_tabs.addTab(self.remarks_widget, "Bemerkungen")
+
         
         # Tab 2: Notenübersicht
         self.grades_widget = self.setup_grades_tab()
@@ -782,15 +784,16 @@ class StudentTab(QWidget):
             self.student_header.setText(header_text)
             self.student_header.setVisible(True)
             
-            # Restliche Details laden
-            self.load_remarks(student_id)
+            # Details laden
+            self.remarks_widget.current_student_id = student_id  # ID setzen
+            self.remarks_widget.load_remarks(student_id)
             self.load_grades(student_id)
             self.load_analysis(student_id)
             
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Fehler",
+                "Fehler", 
                 f"Fehler beim Laden der Schülerdetails: {str(e)}"
             )
 
