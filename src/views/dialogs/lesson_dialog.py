@@ -325,6 +325,7 @@ class LessonDialog(QDialog):
                 if self.lesson and lesson['id'] == self.lesson['id']:
                     continue
                     
+                # Prüfe ob dieser Slot durch eine Stunde belegt ist
                 if lesson['time'] == start_time:
                     # Zeitslot ist belegt
                     self.lessons_table.item(row, 0).setBackground(Qt.GlobalColor.lightGray)
@@ -336,6 +337,17 @@ class LessonDialog(QDialog):
                     # Tooltip mit Zusatzinformationen
                     tooltip = f"Belegt durch: {lesson['subject']} ({lesson['course_name']})"
                     self.lessons_table.item(row, 0).setToolTip(tooltip)
+                    
+                    # Bei Doppelstunden auch den nächsten Slot markieren
+                    if lesson.get('duration', 1) == 2 and row < self.lessons_table.rowCount() - 1:
+                        next_time_item = self.lessons_table.item(row + 1, 0)
+                        next_checkbox = self.lessons_table.cellWidget(row + 1, 1)
+                        if next_time_item:
+                            next_time_item.setBackground(Qt.GlobalColor.lightGray)
+                            next_time_item.setToolTip(f"Belegt durch zweite Stunde von {lesson['subject']} ({lesson['course_name']})")
+                        if next_checkbox:
+                            next_checkbox.setEnabled(False)
+                            next_checkbox.setChecked(False)
                     break
 
     def on_date_selected(self):
