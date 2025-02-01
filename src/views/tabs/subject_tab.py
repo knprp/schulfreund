@@ -106,7 +106,7 @@ class SubjectTab(QWidget):
             
             if ok and name.strip():
                 # Prüfe ob Fach bereits existiert
-                existing = self.main_window.db.execute(  # Hier korrigiert
+                existing = self.main_window.db.execute(
                     "SELECT name FROM subjects WHERE name = ?",
                     (name.strip(),)
                 ).fetchone()
@@ -117,7 +117,7 @@ class SubjectTab(QWidget):
                     return
                     
                 # Füge neues Fach ein
-                self.main_window.db.execute(  # Hier korrigiert
+                self.main_window.db.execute(
                     "INSERT INTO subjects (name) VALUES (?)",
                     (name.strip(),)
                 )
@@ -128,10 +128,8 @@ class SubjectTab(QWidget):
                     f"Fach '{name}' wurde hinzugefügt", 3000
                 )
                 
-                # Alle offenen CourseDialoge aktualisieren
-                for window in self.main_window.findChildren(CourseDialog):
-                    window.reload_subjects()
-                    
+                # Benachrichtige offene Dialoge über die Änderung
+                self.main_window.refresh_all()
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", 

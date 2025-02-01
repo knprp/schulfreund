@@ -57,16 +57,16 @@ class AssessmentTemplateDialog(QDialog):
 
     def load_subjects(self):
         try:
-            # Hole alle vorhandenen Fächer aus den Kursen
+            # Hole alle Fächer aus der subjects-Tabelle
             cursor = self.parent.db.execute(
-                """SELECT DISTINCT subject FROM courses 
-                   WHERE subject IS NOT NULL ORDER BY subject"""
+                "SELECT name FROM subjects ORDER BY name"
             )
-            subjects = [row['subject'] for row in cursor.fetchall()]
+            subjects = [row['name'] for row in cursor.fetchall()]
+            self.subject.clear()  # Liste erst leeren
             self.subject.addItems(subjects)
         except Exception as e:
             QMessageBox.critical(self, "Fehler", 
-                               f"Fehler beim Laden der Fächer: {str(e)}")
+                            f"Fehler beim Laden der Fächer: {str(e)}")
 
     def load_grading_systems(self):
         try:

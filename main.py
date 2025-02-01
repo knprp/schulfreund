@@ -129,6 +129,12 @@ class SchoolManagement(QMainWindow):
         self.list_manager.update_all(date)
         self.list_manager.update_day_list(date)
 
+    def refresh_all(self):
+        """Aktualisiert alle relevanten Ansichten"""
+        # Refresh various tabs and dialogs
+        if hasattr(self, 'subject_tab'):
+            self.subject_tab.refresh_subjects()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
