@@ -1354,7 +1354,14 @@ class DatabaseManager:
             # Hole alle Template-Items
             template_items = self.get_template_items(template_id)
             if not template_items:
-                raise ValueError("Keine Template-Items gefunden")
+                # Statt Exception werfen wir hier eine informative Nachricht
+                QMessageBox.information(
+                    None,
+                    "Hinweis",
+                    "Die ausgewählte Vorlage enthält noch keine Bewertungstypen. "
+                    "Bitte fügen Sie erst Bewertungstypen zur Vorlage hinzu."
+                )
+                return
 
             # Dictionary zum Speichern der ID-Zuordnungen (template_item_id -> assessment_type_id)
             id_mapping = {}
