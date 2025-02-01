@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import (QWidget, QTableWidget, QTableWidgetItem, QHeaderVie
                            QVBoxLayout, QMenu, QStyledItemDelegate, QMessageBox, QStyle)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QBrush, QTextDocument, QAbstractTextDocumentLayout
-
 from .week_navigator import WeekNavigator
 
 class WeekView(QWidget):
@@ -62,28 +61,56 @@ class WeekView(QWidget):
             }
         """)
         layout.addWidget(self.table)
+
         self.update_view(self.week_navigator.current_week_start)
 
     def update_time_slots(self):
         """Aktualisiert die Zeilen und Zeitslots basierend auf den Einstellungen"""
         try:
             if hasattr(self.parent, "settings_tab") and \
-               hasattr(self.parent.settings_tab, "timetable_settings") and \
-               self.parent.settings_tab.timetable_settings is not None:
+            hasattr(self.parent.settings_tab, "timetable_settings") and \
+            self.parent.settings_tab.timetable_settings is not None:
                 
                 time_slots = self.parent.settings_tab.timetable_settings.get_time_slots()
-                self.table.setRowCount(len(time_slots))
                 
-                # Zeitslots als Zeilenüberschriften setzen
-                time_labels = []
+                # Liste für alle Zeilen (normale Stunden + Pausen)
+                all_rows = []
+                last_end_time = None
+                
                 for start_time, end_time, lesson_num in time_slots:
+                    # Prüfe ob es eine Pause zum vorherigen Slot gibt
+                    if last_end_time and start_time != last_end_time:
+                        # Berechne Pausenlänge in Minuten
+                        pause_minutes = last_end_time.secsTo(start_time) / 60
+                        if pause_minutes >= 10:
+                            # Füge Pausenzeile hinzu
+                            pause_label = f"Pause ({int(pause_minutes)} Min.)"
+                            all_rows.append({"label": pause_label, "is_pause": True, 
+                                        "height": int(pause_minutes * 0.8)})
+                    
+                    # Füge normale Stundenzeile hinzu
                     time_label = f"{start_time.toString('HH:mm')} - {end_time.toString('HH:mm')}"
-                    time_labels.append(time_label)
-                    # Zeilenhöhe anpassen (60 Pixel pro Stunde)
-                    self.table.setRowHeight(lesson_num - 1, 60)
+                    all_rows.append({"label": time_label, "is_pause": False, "height": 60})
+                    
+                    last_end_time = end_time
+                
+                # Tabelle aktualisieren
+                self.table.setRowCount(len(all_rows))
+                time_labels = []
+                
+                for row, data in enumerate(all_rows):
+                    time_labels.append(data["label"])
+                    self.table.setRowHeight(row, data["height"])
+                    
+                    # Pausen visuell kennzeichnen
+                    if data["is_pause"]:
+                        pause_item = QTableWidgetItem("")
+                        pause_item.setBackground(QColor("#dee2e6"))
+                        self.table.setItem(row, 0, pause_item)
+                        # Verbinde alle Spalten zu einer
+                        self.table.setSpan(row, 0, 1, self.table.columnCount())
                 
                 self.table.setVerticalHeaderLabels(time_labels)
-                
             else:
                 # Fallback auf Standardzeiten
                 standard_times = [
@@ -113,6 +140,12 @@ class WeekView(QWidget):
         
         row = self.table.rowAt(pos.y())
         col = self.table.columnAt(pos.x())
+        
+        # Prüfe ob es eine Pausenzeile ist
+        if row >= 0:
+            header_text = self.table.verticalHeaderItem(row).text()
+            if header_text.startswith("Pause"):
+                return  # Kein Menü für Pausenzeilen
         
         if item and item.data(Qt.ItemDataRole.UserRole):  # Wenn Stunde existiert
             lesson_id = item.data(Qt.ItemDataRole.UserRole)
@@ -188,9 +221,10 @@ class WeekView(QWidget):
         """Ermittelt die Tabellenzeile für eine bestimmte Uhrzeit"""
         for row in range(self.table.rowCount()):
             header_text = self.table.verticalHeaderItem(row).text()
-            start_time = header_text.split(" - ")[0]
-            if start_time == time:
-                return row
+            if not header_text.startswith("Pause"):  # Pausenzeilen ignorieren
+                start_time = header_text.split(" - ")[0]
+                if start_time == time:
+                    return row
         return -1
 
     def create_lesson_item(self, lesson):
