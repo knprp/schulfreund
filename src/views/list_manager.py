@@ -128,7 +128,8 @@ class ListManager:
                             status,
                             lesson['id'],
                             lesson.get('course_color'),
-                            homework
+                            homework,
+                            lesson.get('status', 'normal')  # Füge den lesson_status hinzu
                         )
             
             # Hole und zeige die nächsten Stunden pro Kurs

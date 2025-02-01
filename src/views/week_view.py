@@ -231,37 +231,43 @@ class WeekView(QWidget):
         """Erstellt ein TableWidgetItem für eine Unterrichtsstunde"""
         item = QTableWidgetItem()
         
-        print("\n=== DEBUG create_lesson_item ===")
-        print("Full lesson dict:", lesson)
-        print("Available keys:", lesson.keys())
-        print("Direct course_color access:", lesson.get('course_color'))
-        
-        # Text formatieren
+        # Basis-Text formatieren
         text = f"<b>{lesson['subject']} {lesson['course_name']}</b>"
         if lesson.get('topic'):
             text += f"<br>{lesson['topic']}"
-            
+
+        # Status-spezifische Formatierung
+        status = lesson.get('status', 'normal')
+        if status == 'cancelled':
+            # Durchgestrichen und vergraut
+            text = f"<strike>{text}</strike>"
+            # Hellere Version der Hintergrundfarbe für cancelled
+            color = self.get_background_color(lesson)
+            color.setAlpha(40)  # Sehr transparent
+        elif status == 'moved':
+            # Kursiv mit Pfeil
+            text = f"<i>{text} →</i>"
+            if lesson.get('status_note'):
+                text += f"<br><small>{lesson['status_note']}</small>"
+            color = QColor('#FFFFD0')  # Hellgelb
+        elif status == 'substituted':
+            # Symbol für Vertretung
+            text = f"🔄 {text}"
+            if lesson.get('status_note'):
+                text += f"<br><small>{lesson['status_note']}</small>"
+            color = self.get_background_color(lesson)
+        else:
+            # Normale Stunde
+            color = self.get_background_color(lesson)
+                
         item.setText(text)
         item.setData(Qt.ItemDataRole.UserRole, lesson['id'])
         
         # Zentrieren und Mehrzeiligkeit erlauben
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         
-        # Debug: Farbe Schritt für Schritt
-        course_color = lesson.get('course_color')
-        print("Got course_color:", course_color)
-        
-        if course_color:
-            print("Creating QColor with:", course_color)
-            color = QColor(course_color)
-            print("Created color:", color.name())
-        else:
-            print("Using fallback color")
-            color = self.get_subject_color(lesson['subject'])
-            print("Fallback color:", color.name())
-        
+        # Hintergrundfarbe setzen
         item.setBackground(QBrush(color))
-        print("=== END DEBUG ===\n")
         
         return item
 
@@ -280,6 +286,17 @@ class WeekView(QWidget):
             'Musik': QColor('#E5FFE5'),       # Hellgrün
         }
         return colors.get(subject, QColor('#FFFFFF'))  # Weiß als Standard
+
+    def get_background_color(self, lesson):
+        """Ermittelt die Hintergrundfarbe für eine Stunde"""
+        if lesson.get('course_color'):
+            color = QColor(lesson['course_color'])
+        else:
+            color = self.get_subject_color(lesson['subject'])
+        
+        # Standard-Alpha für normale Stunden
+        color.setAlpha(40)
+        return color
 
     def on_cell_double_clicked(self, index):
         """Handler für Doppelklick auf eine Zelle"""
