@@ -55,6 +55,40 @@ class LessonDetailsDialog(QDialog):
         self.topic = QLineEdit()
         general_layout.addWidget(self.topic)
 
+        # Status-Bereich
+        status_group = QGroupBox("Status")
+        status_layout = QVBoxLayout()
+
+        # Status Auswahl
+        status_select_layout = QHBoxLayout()
+        status_select_layout.addWidget(QLabel("Status:"))
+        self.status_combo = QComboBox()
+        self.status_combo.addItems(["Normal", "Entfällt", "Verlegt", "Vertretung"])
+        self.status_combo.currentTextChanged.connect(self.on_status_changed)
+        status_select_layout.addWidget(self.status_combo)
+        status_layout.addLayout(status_select_layout)
+
+        # Bemerkung zum Status
+        self.status_note_label = QLabel("Bemerkung zum Status:")
+        status_layout.addWidget(self.status_note_label)
+
+        self.status_note = QLineEdit()
+        self.status_note.setPlaceholderText("z.B. Grund für Ausfall")
+        status_layout.addWidget(self.status_note)
+
+        # Verweis auf neue Stunde (nur bei Status "Verlegt")
+        self.moved_to_container = QWidget()
+        moved_to_layout = QHBoxLayout(self.moved_to_container)
+        moved_to_layout.setContentsMargins(0, 0, 0, 0)
+        moved_to_layout.addWidget(QLabel("Verlegt auf:"))
+        self.moved_to_btn = QPushButton("Neue Stunde auswählen...")
+        self.moved_to_btn.clicked.connect(self.select_moved_lesson)
+        moved_to_layout.addWidget(self.moved_to_btn)
+        status_layout.addWidget(self.moved_to_container)
+
+        status_group.setLayout(status_layout)
+        general_layout.addWidget(status_group)
+
         # Kompetenzen
         competencies_layout = QVBoxLayout()
         competencies_layout.addWidget(QLabel("Kompetenzen:"))
@@ -218,6 +252,29 @@ class LessonDetailsDialog(QDialog):
                 print(f"DEBUG Load - Error loading competencies: {str(e)}")
                 raise
 
+            # Status setzen
+            status_map = {
+                "normal": "Normal",
+                "cancelled": "Entfällt", 
+                "moved": "Verlegt",
+                "substituted": "Vertretung"
+            }
+            self.status_combo.setCurrentText(status_map.get(self.lesson.get('status', 'normal')))
+            
+            # Bemerkung setzen wenn vorhanden
+            self.status_note.setText(self.lesson.get('status_note', ''))
+            
+            # Bei verlegten Stunden Zielstunde anzeigen
+            if self.lesson.get('moved_to_lesson_id'):
+                moved_lesson = self.main_window.db.get_lesson(
+                    self.lesson['moved_to_lesson_id']
+                )
+                if moved_lesson:
+                    self.moved_to_btn.setText(
+                        f"{moved_lesson['date']} {moved_lesson['time']}"
+                    )
+                    self.moved_to_lesson_id = moved_lesson['id']
+
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Laden der Daten: {str(e)}")
 
@@ -379,6 +436,28 @@ class LessonDetailsDialog(QDialog):
             self.main_window.list_manager.update_all(
                 self.main_window.calendar_container.get_selected_date()
             )
+
+            # Status-Informationen zum Speichern vorbereiten
+            status_map = {
+                "Normal": "normal",
+                "Entfällt": "cancelled",
+                "Verlegt": "moved",
+                "Vertretung": "substituted"
+            }
+            status = status_map[self.status_combo.currentText()]
+            
+            # Update lesson dict
+            data = {
+                'topic': self.topic.text().strip(),
+                'homework': self.homework.toHtml() if hasattr(self, 'homework') else '',
+                'status': status,
+                'status_note': self.status_note.text().strip() or None,
+                'moved_to_lesson_id': getattr(self, 'moved_to_lesson_id', None) 
+                                    if status == "moved" else None
+            }
+            
+            # Speichern
+            self.main_window.db.update_lesson(self.lesson_id, data)
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Speichern: {str(e)}")
@@ -820,3 +899,41 @@ class LessonDetailsDialog(QDialog):
             if grade_combo:
                 print(f"DEBUG: Setting grade combo enabled to {has_type} for row {row}")
                 grade_combo.setEnabled(has_type)
+
+
+    def on_status_changed(self, new_status):
+        """Handler für Statusänderungen"""
+        # Konvertiere UI-Text in Datenbankwert
+        status_map = {
+            "Normal": "normal",
+            "Entfällt": "cancelled",
+            "Verlegt": "moved",
+            "Vertretung": "substituted"
+        }
+        status = status_map[new_status]
+        
+        # Zeige/verstecke Moved-To-Container
+        self.moved_to_container.setVisible(status == "moved")
+        
+        # Aktiviere/Deaktiviere Bemerkungsfeld
+        self.status_note.setEnabled(status != "normal")
+        if status == "normal":
+            self.status_note.clear()
+
+    def select_moved_lesson(self):
+        """Öffnet Dialog zur Auswahl der neuen Stunde"""
+        from src.views.dialogs.select_lesson_dialog import SelectLessonDialog
+        dialog = SelectLessonDialog(
+            self.parent,
+            self.lesson['course_id'], 
+            self.lesson['date']
+        )
+        if dialog.exec():
+            selected_lesson = dialog.get_selected_lesson()
+            if selected_lesson:
+                # Speichere ID der Zielstunde
+                self.moved_to_lesson_id = selected_lesson['id']
+                # Update Button-Text
+                self.moved_to_btn.setText(
+                    f"{selected_lesson['date']} {selected_lesson['time']}"
+                )

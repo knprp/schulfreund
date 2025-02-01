@@ -76,9 +76,16 @@ class DayScheduleView(QTableView):
         # Setze columnSpan über alle Spalten
         self.setSpan(row, 0, 1, self.model.columnCount())
 
-    def add_lesson(self, time_slot: str, course: str, subject: str, topic: str, 
-                status: str, lesson_id: int = None, course_color: str = None, homework: str = None):
-        """Fügt eine neue Stunde zur Tabelle hinzu"""
+    def add_lesson(self, time_slot: str, course: str, subject: str, topic: str,
+                status: str, lesson_id: int = None, course_color: str = None, 
+                homework: str = None, lesson_status: str = 'normal'):
+        """
+        Fügt eine neue Stunde zur Tabelle hinzu
+        
+        Args:
+            status: UI-Status (aktuell, kein Thema, kommend, nächste)
+            lesson_status: Stunden-Status (normal, cancelled, moved, substituted)
+        """
         row = []
         
         # Zeit mit gespeicherter lesson_id
@@ -89,23 +96,39 @@ class DayScheduleView(QTableView):
         row.append(time_item)
         
         # Kurs und Fach mit Hintergrundfarbe
-        course_item = QStandardItem(course)
+        base_text = course if lesson_status == 'normal' else self.get_status_text(course, lesson_status)
+        course_item = QStandardItem(base_text)
         subject_item = QStandardItem(subject)
         
         if course_color:
             color = QColor(course_color)
+            # Bei cancelled: mehr Transparenz
+            if lesson_status == 'cancelled':
+                color.setAlpha(40)
+            # Bei moved: Hellgelber Hintergrund
+            elif lesson_status == 'moved':
+                color = QColor('#FFFFD0')
             brightness = (color.red() * 299 + color.green() * 587 + color.blue() * 114) / 1000
             text_color = QColor('white') if brightness < 128 else QColor('black')
             
             for item in [course_item, subject_item]:
                 item.setBackground(color)
                 item.setForeground(text_color)
-        
+                
         row.append(course_item)
         row.append(subject_item)
-        row.append(QStandardItem(topic))
         
-        # Status mit Farbkodierung
+        # Topic mit Status-Formatierung
+        topic_text = topic
+        if lesson_status == 'cancelled':
+            topic_text = f"⛔ {topic} (entfällt)"
+        elif lesson_status == 'moved':
+            topic_text = f"→ {topic} (verlegt)"
+        elif lesson_status == 'substituted':
+            topic_text = f"🔄 {topic} (Vertretung)"
+        row.append(QStandardItem(topic_text))
+        
+        # UI-Status mit Farbkodierung
         status_item = QStandardItem(status)
         status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         if status == "aktuell":
@@ -126,7 +149,7 @@ class DayScheduleView(QTableView):
         if homework and homework.strip():
             hw_row = []
             # Eingerücktes Icon oder Text für Hausaufgaben
-            indent_item = QStandardItem("📚  ")  # Emoji mit Leerzeichen
+            indent_item = QStandardItem("📚 ")  # Emoji mit Leerzeichen
             indent_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             hw_row.append(indent_item)
             
@@ -137,10 +160,19 @@ class DayScheduleView(QTableView):
             
             # Leere Items für die restlichen Spalten
             hw_row.extend([QStandardItem(""), QStandardItem(""), QStandardItem("")])
-            
             self.model.appendRow(hw_row)
             # Verbinde die Kurs- und Fach-Spalte für die Hausaufgabenzeile
             self.setSpan(self.model.rowCount()-1, 1, 1, 2)
+
+    def get_status_text(self, text: str, status: str) -> str:
+        """Formatiert Text entsprechend des Status"""
+        if status == 'cancelled':
+            return f"⛔ {text}"
+        elif status == 'moved':
+            return f"→ {text}"
+        elif status == 'substituted':
+            return f"🔄 {text}"
+        return text
             
 
     def get_lesson_id_at_position(self, pos):

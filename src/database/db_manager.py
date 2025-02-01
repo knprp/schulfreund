@@ -148,6 +148,9 @@ class DatabaseManager:
                     recurring_hash TEXT,
                     lesson_number INTEGER,
                     duration INTEGER,
+                    status TEXT CHECK(status IN ('normal', 'cancelled', 'moved', 'substituted')) DEFAULT 'normal',
+                    status_note TEXT,
+                    moved_to_lesson_id INTEGER REFERENCES lessons(id),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
                 )
@@ -390,10 +393,11 @@ class DatabaseManager:
         )
 
     def add_lesson(self, data: dict) -> int or list:
+        """Fügt eine neue Unterrichtsstunde hinzu."""
         try:
             if not data.get('course_id'):
                 raise ValueError("Eine Unterrichtsstunde muss einem Kurs zugeordnet sein")
-                
+                    
             if data.get('is_recurring'):
                 # Semesterdaten holen
                 semester = self.get_semester_dates()
@@ -418,35 +422,43 @@ class DatabaseManager:
                     if current_date.isoweekday() == weekday:
                         cursor = self.execute(
                             """INSERT INTO lessons
-                            (course_id, date, time, subject, topic, recurring_hash, duration)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                            (course_id, date, time, subject, topic, recurring_hash, duration,
+                            status, status_note, moved_to_lesson_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (data['course_id'],
                             current_date.strftime("%Y-%m-%d"),
                             data['time'],
                             data['subject'],
                             data.get('topic', ''),
                             rec_hash,
-                            data.get('duration', 1))
+                            data.get('duration', 1),
+                            data.get('status', 'normal'),
+                            data.get('status_note'),
+                            data.get('moved_to_lesson_id'))
                         )
                         lesson_ids.append(cursor.lastrowid)
                     current_date += timedelta(days=1)
-                return lesson_ids  # Gebe alle IDs zurück
-            
+                return lesson_ids
+                
             else:
                 # Normale einzelne Unterrichtsstunde
                 cursor = self.execute(
                     """INSERT INTO lessons
-                    (course_id, date, time, subject, topic, duration)
-                    VALUES (?, ?, ?, ?, ?, ?)""",
+                    (course_id, date, time, subject, topic, duration,
+                    status, status_note, moved_to_lesson_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (data['course_id'],
                     data['date'],
                     data['time'],
                     data['subject'],
                     data.get('topic', ''),
-                    data.get('duration', 1))
+                    data.get('duration', 1),
+                    data.get('status', 'normal'),
+                    data.get('status_note'),
+                    data.get('moved_to_lesson_id'))
                 )
                 return cursor.lastrowid
-                
+                    
         except Exception as e:
             raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {str(e)}")
 
