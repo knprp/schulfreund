@@ -178,6 +178,34 @@ class DatabaseManager:
                 )
             ''')
 
+            # Prüfe ob bereits Einstellungen vorhanden sind
+            cursor.execute("SELECT COUNT(*) as count FROM timetable_settings")
+            if cursor.fetchone()['count'] == 0:
+                # Füge Standardeinstellungen ein
+                cursor.execute(
+                    """INSERT INTO timetable_settings 
+                    (id, first_lesson_start, lesson_duration) 
+                    VALUES (1, '08:00', 45)"""
+                )
+                
+                # Füge Standardpausen ein
+                standard_breaks = [
+                    (1, 5),   # Nach 1. Stunde: 5 Minuten
+                    (2, 15),  # Nach 2. Stunde: 15 Minuten
+                    (3, 5),   # Nach 3. Stunde: 5 Minuten
+                    (4, 20),  # Nach 4. Stunde: 20 Minuten
+                    (5, 5),   # Nach 5. Stunde: 5 Minuten
+                    (6, 10),  # Nach 6. Stunde: 10 Minuten
+                    (7, 5),   # Nach 7. Stunde: 5 Minuten
+                    (8, 5),   # Nach 8. Stunde: 5 Minuten
+                    (9, 5),   # Nach 9. Stunde: 5 Minuten
+                ]
+                
+                cursor.executemany(
+                    "INSERT INTO breaks (after_lesson, duration) VALUES (?, ?)",
+                    standard_breaks
+                )
+
             # Bemerkungen Tabelle
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS student_remarks (
