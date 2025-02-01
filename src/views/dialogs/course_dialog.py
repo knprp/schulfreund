@@ -3,7 +3,8 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                            QLineEdit, QDialogButtonBox, QPushButton,
                            QListWidget, QListWidgetItem, QComboBox,
-                           QColorDialog, QMessageBox, QFileDialog)
+                           QColorDialog, QMessageBox, QFileDialog,
+                           QMessageBox)
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import Qt
 
@@ -273,6 +274,7 @@ class CourseDialog(QDialog):
 
             window = self.parent.parent
             data = self.get_data()
+            course_id = None
             
             if self.course:
                 # Update
@@ -288,6 +290,24 @@ class CourseDialog(QDialog):
                 course = Course.create(window.db, **data)
                 course_id = course.id
                 self.course = course
+                
+                # Nach Kurserstellung
+            template_id = self.template.currentData()
+            if template_id:
+                try:
+                    window.db.create_assessment_types_from_template(course_id, template_id)
+                    # Öffne direkt den Dialog zum Bearbeiten der Bewertungstypen
+                    if QMessageBox.question(
+                        self,
+                        "Bewertungstypen",
+                        "Möchten Sie jetzt die Bewertungstypen für diesen Kurs bearbeiten?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    ) == QMessageBox.StandardButton.Yes:
+                        from src.views.dialogs.grading_system_dialog import GradingSystemDialog
+                        edit_dialog = GradingSystemDialog(self, course_id=course_id)
+                        edit_dialog.exec()
+                except ValueError as e:
+                    QMessageBox.information(self, "Hinweis", str(e))
 
             # Button aktivieren
             self.edit_types_btn.setEnabled(True)

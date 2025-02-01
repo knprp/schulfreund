@@ -1354,16 +1354,10 @@ class DatabaseManager:
             # Hole alle Template-Items
             template_items = self.get_template_items(template_id)
             if not template_items:
-                # Statt Exception werfen wir hier eine informative Nachricht
-                QMessageBox.information(
-                    None,
-                    "Hinweis",
-                    "Die ausgewählte Vorlage enthält noch keine Bewertungstypen. "
-                    "Bitte fügen Sie erst Bewertungstypen zur Vorlage hinzu."
-                )
-                return
+                # Statt Nachricht anzuzeigen, werfen wir eine spezielle Exception
+                raise ValueError("Die ausgewählte Vorlage enthält noch keine Bewertungstypen.")
 
-            # Dictionary zum Speichern der ID-Zuordnungen (template_item_id -> assessment_type_id)
+            # Dictionary zum Speichern der ID-Zuordnungen
             id_mapping = {}
 
             # Items der Reihe nach einfügen (sind bereits hierarchisch sortiert)
