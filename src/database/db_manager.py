@@ -105,7 +105,7 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (subject) REFERENCES subjects(name),
-                    FOREIGN KEY (template_id) REFERENCES assessment_type_templates(id)
+                    FOREIGN KEY (template_id) REFERENCES assessment_type_templates(id) ON DELETE SET NULL
                 )
             ''')
             
@@ -2083,7 +2083,17 @@ class DatabaseManager:
 
     def delete_assessment_template(self, template_id: int) -> None:
         """Löscht eine Vorlage und alle ihre Items."""
-        self.execute(
-            "DELETE FROM assessment_type_templates WHERE id = ?",
-            (template_id,)
-        )
+        try:
+            # Zuerst die Template-Items löschen
+            self.execute(
+                "DELETE FROM template_items WHERE template_id = ?",
+                (template_id,)
+            )
+            
+            # Dann das Template selbst löschen
+            self.execute(
+                "DELETE FROM assessment_type_templates WHERE id = ?",
+                (template_id,)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen der Vorlage: {str(e)}")

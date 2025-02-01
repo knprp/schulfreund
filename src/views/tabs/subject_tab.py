@@ -136,21 +136,34 @@ class SubjectTab(QWidget):
                             f"Fehler beim Hinzufügen des Fachs: {str(e)}")
 
     def delete_subject(self):
-        """Löscht das ausgewählte Fach"""
+        """Löscht das ausgewählte Fach."""
         try:
             current = self.table.currentRow()
             if current < 0:
                 return
-                
+                    
             subject = self.table.item(current, 0).text()
-            courses = int(self.table.item(current, 1).text())
             
+            # Prüfe ob das Fach in Vorlagen verwendet wird
+            cursor = self.main_window.db.execute(
+                """SELECT COUNT(*) as count FROM assessment_type_templates 
+                WHERE subject = ?""", (subject,))
+            template_count = cursor.fetchone()['count']
+            
+            if template_count > 0:
+                QMessageBox.warning(self, "Warnung",
+                    f"Das Fach '{subject}' wird noch von {template_count} Vorlage(n) "
+                    "verwendet und kann nicht gelöscht werden!")
+                return
+                    
+            # Prüfe ob das Fach in Kursen verwendet wird    
+            courses = int(self.table.item(current, 1).text())
             if courses > 0:
                 QMessageBox.warning(self, "Warnung",
                     f"Das Fach '{subject}' wird noch von {courses} Kurs(en) verwendet "
                     "und kann nicht gelöscht werden!")
                 return
-                
+                    
             reply = QMessageBox.question(
                 self,
                 'Fach löschen',
@@ -160,21 +173,17 @@ class SubjectTab(QWidget):
             )
             
             if reply == QMessageBox.StandardButton.Yes:
-                self.main_window.db.execute(  # Hier korrigiert
+                self.main_window.db.execute(
                     "DELETE FROM subjects WHERE name = ?",
                     (subject,)
                 )
-                
-            # Nach erfolgreichem Speichern
-            self.refresh_subjects()
-            self.main_window.statusBar().showMessage(
-                f"Fach '{name}' wurde hinzugefügt", 3000
-            )
-            
-            # Alle offenen CourseDialoge aktualisieren
-            for window in self.main_window.findChildren(CourseDialog):
-                window.reload_subjects()
-                
+                    
+                # Nach erfolgreichem Speichern
+                self.refresh_subjects()
+                self.main_window.statusBar().showMessage(
+                    f"Fach '{subject}' wurde gelöscht", 3000
+                )
+                    
         except Exception as e:
             QMessageBox.critical(self, "Fehler", 
-                            f"Fehler beim Hinzufügen des Fachs: {str(e)}")
+                            f"Fehler beim Löschen des Fachs: {str(e)}")
