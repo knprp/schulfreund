@@ -56,6 +56,8 @@ class HolidayManager:
             if len(errors) == 2:
                 error_msg = "\n".join([f"{src}: {str(err)}" for src, err in errors])
                 raise HolidayAPIError(f"Beide APIs nicht erreichbar:\n{error_msg}")
+
+            self.db.update_lesson_status_for_holidays()
                 
         except Exception as e:
             self.logger.error(f"Kritischer Fehler beim Update: {str(e)}")

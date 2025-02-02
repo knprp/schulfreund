@@ -462,7 +462,9 @@ class DatabaseManager:
                         )
                         lesson_ids.append(cursor.lastrowid)
                     current_date += timedelta(days=1)
-                return lesson_ids
+
+                self.update_lesson_status_for_holidays()
+                return lesson_ids if data.get('is_recurring') else cursor.lastrowid
                 
             else:
                 # Normale einzelne Unterrichtsstunde
@@ -2230,3 +2232,36 @@ class DatabaseManager:
             return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             raise Exception(f"Fehler beim Laden der Feiertage: {str(e)}")
+
+
+    def update_lesson_status_for_holidays(self):
+        """Aktualisiert den Status von Stunden, die in Ferien/an Feiertagen liegen."""
+        try:
+            # Hole alle Stunden
+            cursor = self.execute(
+                "SELECT id, date FROM lessons"
+            )
+            lessons = cursor.fetchall()
+            
+            for lesson in lessons:
+                # Prüfe ob das Datum ein Feiertag/Ferientag ist
+                cursor = self.execute(
+                    """SELECT type, name FROM public_holidays 
+                    WHERE date = ?""",
+                    (lesson['date'],)
+                )
+                holiday = cursor.fetchone()
+                
+                if holiday:
+                    status_note = f"Entfällt wegen {'Feiertag' if holiday['type'] == 'holiday' else 'Ferien'}: {holiday['name']}"
+                    # Update den Status
+                    self.execute(
+                        """UPDATE lessons 
+                        SET status = 'cancelled',
+                            status_note = ?
+                        WHERE id = ?""",
+                        (status_note, lesson['id'])
+                    )
+                    
+        except Exception as e:
+            raise Exception(f"Fehler beim Aktualisieren der Stunden-Status: {str(e)}")
