@@ -330,18 +330,42 @@ class DatabaseManager:
                 )
             ''')
 
-            # Prüfe ob die template_id Spalte existiert, wenn nicht füge sie hinzu
-            try:
-                cursor.execute("ALTER TABLE courses ADD COLUMN template_id INTEGER REFERENCES assessment_type_templates(id)")
-            except sqlite3.OperationalError as e:
-                if "duplicate column name" not in str(e).lower():
-                    raise e
+            # Feiertage und Ferientage (automatisch über API)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS public_holidays (
+                    id INTEGER PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    type TEXT CHECK(type IN ('holiday', 'vacation_day')) NOT NULL,
+                    state TEXT NOT NULL,  -- Bundesland 
+                    year INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Zusätzliche schulspezifische freie Tage (manuell)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS school_holidays (
+                    id INTEGER PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # # Prüfe ob die template_id Spalte existiert, wenn nicht füge sie hinzu
+            # try:
+            #     cursor.execute("ALTER TABLE courses ADD COLUMN template_id INTEGER REFERENCES assessment_type_templates(id)")
+            # except sqlite3.OperationalError as e:
+            #     if "duplicate column name" not in str(e).lower():
+            #         raise e
 
             self.conn.commit()               
         except sqlite3.Error as e:
             raise Exception(f"Fehler beim Erstellen der Tabellen: {e}")                 
 
-                   # Indizes für bessere Performance
+            # Indizes für bessere Performance
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_lesson ON grades(lesson_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_grades_competency ON grades(competency_id)')
@@ -2097,3 +2121,112 @@ class DatabaseManager:
             )
         except Exception as e:
             raise Exception(f"Fehler beim Löschen der Vorlage: {str(e)}")
+
+
+
+    def add_public_holiday(self, date: str, name: str, type: str, state: str, year: int) -> int:
+        """Fügt einen neuen Feiertag/Ferientag hinzu."""
+        try:
+            cursor = self.execute(
+                """INSERT INTO public_holidays 
+                (date, name, type, state, year) 
+                VALUES (?, ?, ?, ?, ?)""",
+                (date, name, type, state, year)
+            )
+            return cursor.lastrowid
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen des Feiertags: {str(e)}")
+
+    def add_school_holiday(self, date: str, name: str, description: str = None) -> int:
+        """Fügt einen schulspezifischen freien Tag hinzu."""
+        try:
+            cursor = self.execute(
+                """INSERT INTO school_holidays 
+                (date, name, description)
+                VALUES (?, ?, ?)""",
+                (date, name, description)
+            )
+            return cursor.lastrowid
+        except Exception as e:
+            raise Exception(f"Fehler beim Hinzufügen des Schulfeiertags: {str(e)}")
+
+    def delete_public_holiday(self, holiday_id: int) -> None:
+        """Löscht einen Feiertag/Ferientag."""
+        try:
+            self.execute(
+                "DELETE FROM public_holidays WHERE id = ?",
+                (holiday_id,)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen des Feiertags: {str(e)}")
+
+    def delete_school_holiday(self, holiday_id: int) -> None:
+        """Löscht einen schulspezifischen freien Tag."""
+        try:
+            self.execute(
+                "DELETE FROM school_holidays WHERE id = ?",
+                (holiday_id,)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen des Schulfeiertags: {str(e)}")
+
+    def get_holidays_by_date_range(self, start_date: str, end_date: str) -> list:
+        """Holt alle Feiertage und freien Tage in einem Zeitraum."""
+        try:
+            # Erst die öffentlichen Feiertage/Ferien
+            cursor = self.execute(
+                """SELECT date, name, type, 'public' as source
+                FROM public_holidays 
+                WHERE date BETWEEN ? AND ?""",
+                (start_date, end_date)
+            )
+            holidays = [dict(row) for row in cursor.fetchall()]
+            
+            # Dann die schulspezifischen
+            cursor = self.execute(
+                """SELECT date, name, 'school' as type, 'school' as source
+                FROM school_holidays 
+                WHERE date BETWEEN ? AND ?""",
+                (start_date, end_date)
+            )
+            holidays.extend([dict(row) for row in cursor.fetchall()])
+            
+            # Sortiert nach Datum zurückgeben
+            return sorted(holidays, key=lambda x: x['date'])
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der Feiertage: {str(e)}")
+
+    def clear_public_holidays(self, year: int, state: str) -> None:
+        """Löscht alle öffentlichen Feiertage eines Jahres/Bundeslandes."""
+        try:
+            self.execute(
+                """DELETE FROM public_holidays 
+                WHERE year = ? AND state = ?""",
+                (year, state)
+            )
+        except Exception as e:
+            raise Exception(f"Fehler beim Löschen der Feiertage: {str(e)}")
+
+    def get_school_holidays(self) -> list:
+        """Holt alle schulspezifischen freien Tage."""
+        try:
+            cursor = self.execute(
+                """SELECT * FROM school_holidays 
+                ORDER BY date"""
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der Schulfeiertage: {str(e)}")
+
+    def get_public_holidays_by_year(self, year: int, state: str) -> list:
+        """Holt alle öffentlichen Feiertage/Ferien eines Jahres."""
+        try:
+            cursor = self.execute(
+                """SELECT * FROM public_holidays 
+                WHERE year = ? AND state = ?
+                ORDER BY date""",
+                (year, state)
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            raise Exception(f"Fehler beim Laden der Feiertage: {str(e)}")

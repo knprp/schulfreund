@@ -19,6 +19,7 @@ from src.views.tabs.settings_tab import SettingsTab
 from src.views.tabs.subject_tab import SubjectTab
 from src.views.calendar_container import CalendarContainer
 from src.views.status_display import StatusDisplay
+from src.models.holiday_manager import HolidayManager
 
 class SchoolManagement(QMainWindow):
     def __init__(self):
@@ -26,6 +27,10 @@ class SchoolManagement(QMainWindow):
         
         # Datenbank initialisieren
         self.db = DatabaseManager()
+
+        # Holiday Manager initialisieren und Daten laden
+        self.holiday_manager = HolidayManager(self.db)
+        self.holiday_manager.initialize_holidays()
         
         # UI aus .ui Datei laden
         uic.loadUi("school.ui", self)
