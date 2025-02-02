@@ -198,7 +198,7 @@ class WeekView(QWidget):
         
         # Hole die Feiertage für diese Woche
         holidays = self.parent.holiday_manager.get_holidays_for_week(
-            week_start.toPyDate()  # Konvertiere QDate zu Python datetime
+            week_start.toPyDate()
         )
         
         # Erstelle ein Dict für schnellen Zugriff auf Feiertage
@@ -211,22 +211,40 @@ class WeekView(QWidget):
             lessons = self.parent.db.get_lessons_by_date(date_str)
             
             # Prüfe ob der Tag ein Feiertag/Ferientag ist
-            if date_str in holiday_dict:
+            is_holiday = date_str in holiday_dict
+            if is_holiday:
                 holiday = holiday_dict[date_str]
                 self.mark_holiday(day, holiday)
-            
-            # Füge Stunden in die entsprechenden Zellen ein
-            for lesson in lessons:
-                time = lesson['time']
-                row = self.get_row_for_time(time)
-                if row >= 0:
-                    item = self.create_lesson_item(lesson)
-                    self.table.setItem(row, day, item)
-                    
-                    if lesson.get('duration', 1) == 2 and row < self.table.rowCount() - 1:
-                        self.table.setSpan(row, day, 2, 1)
-                        if self.table.item(row + 1, day):
-                            self.table.takeItem(row + 1, day)
+                
+                # Markiere die Stunden als entfallen
+                for lesson in lessons:
+                    time = lesson['time']
+                    row = self.get_row_for_time(time)
+                    if row >= 0:
+                        lesson['status'] = 'cancelled'  # Status auf cancelled setzen
+                        # Grund für das Entfallen hinzufügen
+                        reason = "Feiertag" if holiday['type'] == 'holiday' else "Ferien"
+                        lesson['status_note'] = f"Entfällt wegen {reason}: {holiday['name']}"
+                        item = self.create_lesson_item(lesson)
+                        self.table.setItem(row, day, item)
+                        
+                        if lesson.get('duration', 1) == 2 and row < self.table.rowCount() - 1:
+                            self.table.setSpan(row, day, 2, 1)
+                            if self.table.item(row + 1, day):
+                                self.table.takeItem(row + 1, day)
+            else:
+                # Normale Stunden anzeigen
+                for lesson in lessons:
+                    time = lesson['time']
+                    row = self.get_row_for_time(time)
+                    if row >= 0:
+                        item = self.create_lesson_item(lesson)
+                        self.table.setItem(row, day, item)
+                        
+                        if lesson.get('duration', 1) == 2 and row < self.table.rowCount() - 1:
+                            self.table.setSpan(row, day, 2, 1)
+                            if self.table.item(row + 1, day):
+                                self.table.takeItem(row + 1, day)
             
             current_date = current_date.addDays(1)
 
@@ -252,11 +270,21 @@ class WeekView(QWidget):
         # Status-spezifische Formatierung
         status = lesson.get('status', 'normal')
         if status == 'cancelled':
-            # Durchgestrichen und vergraut
-            text = f"<strike>{text}</strike>"
-            # Hellere Version der Hintergrundfarbe für cancelled
-            color = self.get_background_color(lesson)
-            color.setAlpha(40)  # Sehr transparent
+            # Deutlichere Markierung für entfallene Stunden
+            text = (f"<div style='color: #999999;'>"  # Grauer Text
+                f"<s>{text}</s>"          # Durchgestrichen
+                f"<br>⛔ <small>{lesson.get('status_note', 'Entfällt')}</small>"  # Entfallen-Symbol und Grund
+                f"</div>")
+            # Sehr heller Hintergrund mit rötlichem Ton
+            color = QColor(255, 240, 240)
+            if lesson.get('course_color'):
+                base_color = QColor(lesson['course_color'])
+                color = QColor(
+                    min(255, base_color.red() + 200),
+                    min(255, base_color.green() + 180),
+                    min(255, base_color.blue() + 180),
+                40  # Sehr transparent
+                )
         elif status == 'moved':
             # Kursiv mit Pfeil
             text = f"<i>{text} →</i>"
@@ -335,13 +363,20 @@ class WeekView(QWidget):
         """Markiert eine Spalte als Feiertag/Ferientag"""
         # Farben für verschiedene Arten von freien Tagen
         colors = {
-            'holiday': QColor("#FFE6E6"),     # Hellrot für Feiertage
-            'vacation_day': QColor("#E6FFE6"), # Hellgrün für Ferien
-            'school': QColor("#E6E6FF")       # Hellblau für schulspezifische Tage
+            'holiday': QColor(255, 230, 230, 100),     # Hellrot mit Transparenz
+            'vacation_day': QColor(230, 255, 230, 100), # Hellgrün mit Transparenz
+            'school': QColor(230, 230, 255, 100)       # Hellblau mit Transparenz
         }
         
-        # Wähle die Farbe basierend auf dem Typ
+        # Icons für verschiedene Typen
+        icons = {
+            'holiday': "★",    # Stern für Feiertag
+            'vacation_day': "☼", # Sonne für Ferien
+            'school': "✎"      # Stift für Schulfrei
+        }
+        
         color = colors.get(holiday['type'], QColor("#FFFFFF"))
+        icon = icons.get(holiday['type'], "")
         
         # Färbe die ganze Spalte ein
         for row in range(self.table.rowCount()):
@@ -353,10 +388,22 @@ class WeekView(QWidget):
             # Setze Hintergrundfarbe
             item.setBackground(color)
             
-            # Wenn es die erste Zelle ist, zeige den Namen des Feiertags
+            # In der ersten Zeile den Namen anzeigen
             if row == 0:
-                tooltip = f"{holiday['name']}\n{holiday['type']}"
+                item.setText(f"{icon} {holiday['name']}")
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                # Fett für Feiertage
+                if holiday['type'] == 'holiday':
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
+                
+                tooltip = (f"{'Feiertag' if holiday['type'] == 'holiday' else 'Ferien' if holiday['type'] == 'vacation_day' else 'Schulfrei'}\n"
+                        f"{holiday['name']}")
                 item.setToolTip(tooltip)
+                
+                # Zellen verbinden für bessere Lesbarkeit des Namens
+                self.table.setSpan(0, column, 1, 1)
 
 
 
