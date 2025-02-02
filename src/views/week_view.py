@@ -196,11 +196,24 @@ class WeekView(QWidget):
         
         self.table.clearContents()
         
+        # Hole die Feiertage für diese Woche
+        holidays = self.parent.holiday_manager.get_holidays_for_week(
+            week_start.toPyDate()  # Konvertiere QDate zu Python datetime
+        )
+        
+        # Erstelle ein Dict für schnellen Zugriff auf Feiertage
+        holiday_dict = {h['date']: h for h in holidays}
+        
         # Hole die Daten für jeden Tag der Woche
         current_date = week_start
         for day in range(5):  # Mo-Fr
             date_str = current_date.toString("yyyy-MM-dd")
             lessons = self.parent.db.get_lessons_by_date(date_str)
+            
+            # Prüfe ob der Tag ein Feiertag/Ferientag ist
+            if date_str in holiday_dict:
+                holiday = holiday_dict[date_str]
+                self.mark_holiday(day, holiday)
             
             # Füge Stunden in die entsprechenden Zellen ein
             for lesson in lessons:
@@ -317,6 +330,33 @@ class WeekView(QWidget):
                 "Fehler",
                 f"Fehler beim Öffnen der Stundendetails: {str(e)}"
             )
+
+    def mark_holiday(self, column: int, holiday: dict):
+        """Markiert eine Spalte als Feiertag/Ferientag"""
+        # Farben für verschiedene Arten von freien Tagen
+        colors = {
+            'holiday': QColor("#FFE6E6"),     # Hellrot für Feiertage
+            'vacation_day': QColor("#E6FFE6"), # Hellgrün für Ferien
+            'school': QColor("#E6E6FF")       # Hellblau für schulspezifische Tage
+        }
+        
+        # Wähle die Farbe basierend auf dem Typ
+        color = colors.get(holiday['type'], QColor("#FFFFFF"))
+        
+        # Färbe die ganze Spalte ein
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, column)
+            if not item:
+                item = QTableWidgetItem()
+                self.table.setItem(row, column, item)
+            
+            # Setze Hintergrundfarbe
+            item.setBackground(color)
+            
+            # Wenn es die erste Zelle ist, zeige den Namen des Feiertags
+            if row == 0:
+                tooltip = f"{holiday['name']}\n{holiday['type']}"
+                item.setToolTip(tooltip)
 
 
 
