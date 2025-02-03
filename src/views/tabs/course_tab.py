@@ -145,6 +145,7 @@ class CourseTab(QWidget):
     def load_course_lessons(self, course_id: int):
         """Lädt die Stunden des ausgewählten Kurses"""
         try:
+            # Ergänze status und status_note in der SQL-Abfrage
             cursor = self.parent.db.execute("""
                 SELECT DISTINCT 
                     l.id,
@@ -153,8 +154,8 @@ class CourseTab(QWidget):
                     l.topic,
                     l.duration,
                     l.status,
-                    GROUP_CONCAT(c.area || ': ' || c.description) as competencies,
-                    COUNT(*) OVER () as total_count
+                    l.status_note,
+                    GROUP_CONCAT(c.area || ': ' || c.description) as competencies
                 FROM lessons l
                 LEFT JOIN lesson_competencies lc ON l.id = lc.lesson_id
                 LEFT JOIN competencies c ON lc.competency_id = c.id
@@ -164,24 +165,33 @@ class CourseTab(QWidget):
             """, (course_id,))
             
             lessons = cursor.fetchall()
-            total_lessons = lessons[0]['total_count'] if lessons else 0
-            print(f"Loading {total_lessons} lessons for course {course_id}")  # Debug
             
-            # Tabelle leeren und auf richtige Größe setzen 
-            self.lesson_table.setRowCount(total_lessons)
+            # Tabelle leeren und Größe anpassen
+            self.lesson_table.setRowCount(0)
+            self.lesson_table.setColumnCount(5)  # Jetzt 5 Spalten
+            self.lesson_table.setHorizontalHeaderLabels(['Datum', 'Zeit', 'Thema', 'Kompetenzen', 'Status'])
+            
+            # Spaltenbreiten optimieren
+            header = self.lesson_table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Datum
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Zeit
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)           # Thema
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)           # Kompetenzen
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Status
+            
+            self.lesson_table.setRowCount(len(lessons))
             
             for row, lesson in enumerate(lessons):
-                print(f"Processing lesson {row + 1}/{total_lessons}: ID={lesson['id']}, Status={lesson['status']}")  # Debug
                 # Datum
                 date_item = QTableWidgetItem(lesson['date'])
-                date_item.setData(Qt.ItemDataRole.UserRole, lesson['id']) 
                 self.lesson_table.setItem(row, 0, date_item)
                 
-                # Zeit
+                # Zeit (mit Doppelstunden-Markierung)
                 time_text = lesson['time']
                 if lesson['duration'] == 2:
                     time_text += " (Doppelstunde)"
-                self.lesson_table.setItem(row, 1, QTableWidgetItem(time_text))
+                time_item = QTableWidgetItem(time_text)
+                self.lesson_table.setItem(row, 1, time_item)
                 
                 # Thema
                 topic_item = QTableWidgetItem(lesson['topic'] or "")
@@ -192,67 +202,37 @@ class CourseTab(QWidget):
                 comp_item = QTableWidgetItem(comp_text.replace(",", "\n"))
                 self.lesson_table.setItem(row, 3, comp_item)
                 
+                # Status mit Note (neu)
+                status = lesson['status'] if lesson['status'] is not None else 'normal'
+                status_text = {
+                    'normal': 'Normal',
+                    'cancelled': 'Entfällt',
+                    'moved': 'Verlegt',
+                    'substituted': 'Vertretung'
+                }.get(status, status)
+
+                if lesson['status_note'] is not None:
+                    status_text += f"\n{lesson['status_note']}"
+                    
+                status_item = QTableWidgetItem(status_text)
+
+                # Farbliche Markierung je nach Status
+                if status == 'cancelled':
+                    status_item.setBackground(QColor(255, 200, 200))  # Hellrot
+                elif status == 'moved':
+                    status_item.setBackground(QColor(255, 255, 200))  # Hellgelb
+                elif status == 'substituted':
+                    status_item.setBackground(QColor(200, 255, 200))  # Hellgrün
+                    
+                self.lesson_table.setItem(row, 4, status_item)
+                
                 # Lesson-ID als Userdata speichern
                 date_item.setData(Qt.ItemDataRole.UserRole, lesson['id'])
                 
-            # Automatische Auswahl der nächsten Stunde
-            if self.lesson_table.rowCount() > 0:
-                # Aktuelle Zeit/Datum für Vergleich
-                current_date = QDate.currentDate().toString("yyyy-MM-dd")
-                current_time = QTime.currentTime().toString("HH:mm")
-                
-                # Suche zuerst nach Stunden am aktuellen Tag
-                current_day_rows = []
-                future_rows = []
-                past_rows = []
-                
-                for row in range(self.lesson_table.rowCount()):
-                    lesson_date = self.lesson_table.item(row, 0).text()
-                    lesson_time = self.lesson_table.item(row, 1).text().split(" ")[0]  # Zeit ohne "(Doppelstunde)"
-                    
-                    if lesson_date == current_date:
-                        current_day_rows.append((row, lesson_time))
-                    elif lesson_date > current_date:
-                        future_rows.append((row, lesson_date))
-                    else:
-                        past_rows.append((row, lesson_date))
-                
-                # Finde die nächste Stunde für heute
-                next_row = None
-                if current_day_rows:
-                    # Sortiere nach Zeit
-                    current_day_rows.sort(key=lambda x: x[1])
-                    # Finde die nächste Stunde heute
-                    for row, time in current_day_rows:
-                        if time >= current_time:
-                            next_row = row
-                            break
-                    # Wenn keine spätere Stunde heute, nehme die erste Stunde des nächsten Datums
-                    if next_row is None and future_rows:
-                        future_rows.sort(key=lambda x: x[1])  # Sortiere nach Datum
-                        next_row = future_rows[0][0]
-                # Wenn kein heutiges Datum gefunden, nimm das nächste verfügbare Datum
-                elif future_rows:
-                    future_rows.sort(key=lambda x: x[1])  # Sortiere nach Datum
-                    next_row = future_rows[0][0]
-                # Wenn keine zukünftigen Stunden, nimm die letzte vergangene Stunde
-                elif past_rows:
-                    past_rows.sort(key=lambda x: x[1], reverse=True)  # Sortiere nach Datum absteigend
-                    next_row = past_rows[0][0]
-                else:
-                    next_row = 0  # Fallback auf erste Zeile
-                
-                # Zeile auswählen und sichtbar machen
-                self.lesson_table.selectRow(next_row)
-                self.lesson_table.scrollTo(
-                    self.lesson_table.model().index(next_row, 0),
-                    QAbstractItemView.ScrollHint.PositionAtCenter
-                )
-
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Fehler",
+                "Fehler", 
                 f"Fehler beim Laden der Stunden: {str(e)}"
             )
 
