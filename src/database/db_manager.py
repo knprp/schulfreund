@@ -4,12 +4,46 @@ import sqlite3
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta  # timedelta hier hinzugefügt
 
+# Repository-Imports
+from .repositories import (
+    StudentRepository,
+    CourseRepository,
+    LessonRepository,
+    CompetencyRepository,
+    AssessmentRepository,
+    AssessmentTypeRepository,
+    AssessmentTemplateRepository,
+    GradingSystemRepository,
+    SemesterRepository,
+    HolidayRepository,
+    AttendanceRepository,
+    SettingsRepository,
+)
+
 class DatabaseManager:
     def __init__(self, db_file: str = "school.db"):
         self.db_file = db_file
         self.conn = None
         self.connect()
         self.setup_tables()
+        
+        # Repositories initialisieren
+        self._init_repositories()
+    
+    def _init_repositories(self):
+        """Initialisiert alle Repository-Instanzen."""
+        self.students = StudentRepository(self)
+        self.courses = CourseRepository(self)
+        self.lessons = LessonRepository(self)
+        self.competencies = CompetencyRepository(self)
+        self.assessments = AssessmentRepository(self)
+        self.assessment_types = AssessmentTypeRepository(self)
+        self.assessment_templates = AssessmentTemplateRepository(self)
+        self.grading_systems = GradingSystemRepository(self)
+        self.semesters = SemesterRepository(self)
+        self.holidays = HolidayRepository(self)
+        self.attendance = AttendanceRepository(self)
+        self.settings = SettingsRepository(self)
     
     def connect(self) -> None:
         """Stellt eine Verbindung zur Datenbank her."""
@@ -375,196 +409,95 @@ class DatabaseManager:
         ''')
         
 
-    # Student-bezogene Methoden
-    def add_student(self, name: str) -> int:
-        """Fügt einen neuen Schüler hinzu und gibt seine ID zurück."""
-        cursor = self.execute(
-            "INSERT INTO students (name) VALUES (?)",
-            (name,)
-        )
-        return cursor.lastrowid
+    # Student-bezogene Methoden (delegieren an StudentRepository)
+    def add_student(self, name: str = None, first_name: str = None, last_name: str = None) -> int:
+        """Fügt einen neuen Schüler hinzu und gibt seine ID zurück.
+        
+        DEPRECATED: Verwende self.students.add() stattdessen.
+        Unterstützt alte API (nur name) und neue API (first_name, last_name).
+        """
+        if name:
+            # Alte API: name wird in first_name und last_name aufgeteilt
+            parts = name.strip().split(' ', 1)
+            first_name = parts[0] if parts else ""
+            last_name = parts[1] if len(parts) > 1 else ""
+        elif first_name is None or last_name is None:
+            raise ValueError("Entweder 'name' oder 'first_name' und 'last_name' müssen angegeben werden")
+        
+        return self.students.add(first_name, last_name)
 
     def get_student(self, student_id: int) -> Optional[Dict[str, Any]]:
-        """Holt einen einzelnen Schüler anhand seiner ID."""
-        cursor = self.execute(
-            "SELECT * FROM students WHERE id = ?",
-            (student_id,)
-        )
-        return dict(cursor.fetchone()) if cursor.fetchone() else None
+        """Holt einen einzelnen Schüler anhand seiner ID.
+        
+        DEPRECATED: Verwende self.students.get_by_id() stattdessen.
+        """
+        return self.students.get_by_id(student_id)
 
     def get_all_students(self) -> list:
-        """Holt alle Schüler aus der Datenbank."""
-        try:
-            cursor = self.execute(
-                "SELECT id, first_name, last_name FROM students ORDER BY last_name, first_name"
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Abrufen der Schüler: {e}")
+        """Holt alle Schüler aus der Datenbank.
+        
+        DEPRECATED: Verwende self.students.get_all() stattdessen.
+        """
+        return self.students.get_all()
 
-    def update_student(self, student_id: int, name: str) -> None:
-        """Aktualisiert die Daten eines Schülers."""
-        self.execute(
-            "UPDATE students SET name = ? WHERE id = ?",
-            (name, student_id)
-        )
+    def update_student(self, student_id: int, name: str = None, 
+                      first_name: str = None, last_name: str = None) -> None:
+        """Aktualisiert die Daten eines Schülers.
+        
+        DEPRECATED: Verwende self.students.update() stattdessen.
+        Unterstützt alte API (nur name) und neue API (first_name, last_name).
+        """
+        if name:
+            # Alte API: name wird in first_name und last_name aufgeteilt
+            parts = name.strip().split(' ', 1)
+            first_name = parts[0] if parts else ""
+            last_name = parts[1] if len(parts) > 1 else ""
+        elif first_name is None or last_name is None:
+            raise ValueError("Entweder 'name' oder 'first_name' und 'last_name' müssen angegeben werden")
+        
+        self.students.update(student_id, first_name, last_name)
 
     def delete_student(self, student_id: int) -> None:
-        """Löscht einen Schüler aus der Datenbank."""
-        self.execute(
-            "DELETE FROM students WHERE id = ?",
-            (student_id,)
-        )
+        """Löscht einen Schüler aus der Datenbank.
+        
+        DEPRECATED: Verwende self.students.delete() stattdessen.
+        """
+        self.students.delete(student_id)
+    
+    def get_students_by_course(self, course_id: int, semester_id: int) -> list:
+        """Holt alle Schüler eines Kurses in einem bestimmten Semester.
+        
+        DEPRECATED: Verwende self.students.get_by_course() stattdessen.
+        """
+        return self.students.get_by_course(course_id, semester_id)
 
     def add_lesson(self, data: dict) -> int or list:
-        """Fügt eine neue Unterrichtsstunde hinzu."""
-        try:
-            if not data.get('course_id'):
-                raise ValueError("Eine Unterrichtsstunde muss einem Kurs zugeordnet sein")
-                    
-            if data.get('is_recurring'):
-                # Semesterdaten holen
-                semester = self.get_semester_dates()
-                if not semester:
-                    raise ValueError("Kein aktives Halbjahr gefunden")
-                # Wochentag bestimmen
-                start_date = datetime.strptime(data['date'], "%Y-%m-%d")
-                weekday = start_date.isoweekday()
-                # Hash generieren
-                time_str = data['time'] if isinstance(data['time'], str) else data['time'][0]
-                rec_hash = self.generate_recurring_hash(
-                    data['course_id'],
-                    weekday,
-                    time_str
-                )
-                # Alle Termine bis Semesterende erstellen
-                lesson_ids = []
-                current_date = start_date
-                end_date = datetime.strptime(semester['semester_end'], "%Y-%m-%d")
-                
-                while current_date <= end_date:
-                    if current_date.isoweekday() == weekday:
-                        cursor = self.execute(
-                            """INSERT INTO lessons
-                            (course_id, date, time, subject, topic, recurring_hash, duration,
-                            status, status_note, moved_to_lesson_id)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (data['course_id'],
-                            current_date.strftime("%Y-%m-%d"),
-                            data['time'],
-                            data['subject'],
-                            data.get('topic', ''),
-                            rec_hash,
-                            data.get('duration', 1),
-                            data.get('status', 'normal'),
-                            data.get('status_note'),
-                            data.get('moved_to_lesson_id'))
-                        )
-                        lesson_ids.append(cursor.lastrowid)
-                    current_date += timedelta(days=1)
-
-                self.update_lesson_status_for_holidays()
-                return lesson_ids if data.get('is_recurring') else cursor.lastrowid
-                
-            else:
-                # Normale einzelne Unterrichtsstunde
-                cursor = self.execute(
-                    """INSERT INTO lessons
-                    (course_id, date, time, subject, topic, duration,
-                    status, status_note, moved_to_lesson_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (data['course_id'],
-                    data['date'],
-                    data['time'],
-                    data['subject'],
-                    data.get('topic', ''),
-                    data.get('duration', 1),
-                    data.get('status', 'normal'),
-                    data.get('status_note'),
-                    data.get('moved_to_lesson_id'))
-                )
-                return cursor.lastrowid
-                    
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen der Unterrichtsstunde: {str(e)}")
+        """Fügt eine neue Unterrichtsstunde hinzu.
+        
+        DEPRECATED: Verwende self.lessons.add() stattdessen.
+        """
+        return self.lessons.add(data)
 
     def get_lessons_by_date(self, date: str) -> List[Dict[str, Any]]:
-        """Holt alle Unterrichtsstunden für ein bestimmtes Datum."""
+        """Holt alle Unterrichtsstunden für ein bestimmtes Datum.
         
-        # Erst alle Lektionen anzeigen
-        cursor = self.execute("SELECT DISTINCT date FROM lessons ORDER BY date")
-        dates = [row['date'] for row in cursor.fetchall()]
-        
-        # Dann die eigentliche Query
-        query = """
-            SELECT 
-                l.*,
-                c.name as course_name,
-                c.color as course_color
-            FROM lessons l
-            JOIN courses c ON l.course_id = c.id
-            WHERE l.date = ?
+        DEPRECATED: Verwende self.lessons.get_by_date() stattdessen.
         """
-        
-        cursor = self.execute(query, (date,))
-        results = [dict(row) for row in cursor.fetchall()]
-        return results
+        return self.lessons.get_by_date(date)
 
     def get_all_lessons(self) -> List[Dict[str, Any]]:
-            """Holt alle Unterrichtsstunden."""
-            cursor = self.execute(
-                "SELECT * FROM lessons ORDER BY date, time"
-            )
-            return [dict(row) for row in cursor.fetchall()]
+        """Holt alle Unterrichtsstunden.
+        
+        DEPRECATED: Verwende self.lessons.get_all() stattdessen.
+        """
+        return self.lessons.get_all()
 
     def get_next_lesson_by_course(self, date: str) -> List[Dict[str, Any]]:
-        """Holt für jeden Kurs die nächste anstehende Stunde nach einem Datum."""
-        try:
-            query = """
-                SELECT 
-                    l.*,
-                    c.name as course_name,
-                    c.color as course_color
-                FROM lessons l
-                JOIN courses c ON l.course_id = c.id
-                WHERE l.date >= ?
-                ORDER BY l.date, l.time
-            """
-            cursor = self.execute(query, (date,))
-            all_lessons = [dict(row) for row in cursor.fetchall()]
-            
-            # Dictionary für die nächsten Stunden pro Kurs
-            next_lessons = {}
-            current_time = datetime.now()
-            current_time_str = current_time.strftime("%H:%M")
-            
-            # Hole Zeiteinstellungen für Stundenlänge
-            settings = self.get_time_settings()
-            lesson_duration = 45  # Standard-Stundenlänge in Minuten
-            if settings and 'lesson_duration' in settings:
-                lesson_duration = settings['lesson_duration']
-            
-            for lesson in all_lessons:
-                course_id = lesson['course_id']
-                if course_id in next_lessons:
-                    continue
-                    
-                # Berechne Endzeit der Stunde
-                lesson_time = datetime.strptime(lesson['time'], "%H:%M")
-                lesson_end = (lesson_time + timedelta(minutes=lesson_duration * 
-                                                    (lesson.get('duration', 1)))).time()
-                
-                # Überspringe Stunden vom aktuellen Tag die schon vorbei sind
-                if (lesson['date'] == date and 
-                    lesson_end.strftime("%H:%M") <= current_time_str):
-                    continue
-                    
-                next_lessons[course_id] = lesson
-                
-            return list(next_lessons.values())
-                    
-        except Exception as e:
-            raise Exception(f"Fehler beim Laden der nächsten Stunden: {str(e)}")
+        """Holt für jeden Kurs die nächste anstehende Stunde nach einem Datum.
+        
+        DEPRECATED: Verwende self.lessons.get_next_by_course() stattdessen.
+        """
+        return self.lessons.get_next_by_course(date)
 
     # Kompetenz-bezogene Methoden
     def add_competency(self, data: dict) -> int:
@@ -621,28 +554,50 @@ class DatabaseManager:
     #     )
     #     return [dict(row) for row in cursor.fetchall()]
 
-    # Einstellungs-bezogene Methoden
+    # Einstellungs-bezogene Methoden (delegieren an SemesterRepository)
     def save_semester_dates(self, start_date: str, end_date: str) -> None:
-        """Speichert die Semesterdaten."""
-        self.execute(
-            """INSERT OR REPLACE INTO settings 
-               (id, semester_start, semester_end)
-               VALUES (1, ?, ?)""",
-            (start_date, end_date)
-        )
+        """Speichert die Semesterdaten.
+        
+        DEPRECATED: Verwende self.semesters.save_current() stattdessen.
+        """
+        self.semesters.save_current(start_date, end_date)
 
     def get_semester_dates(self) -> dict:
-        """Holt die aktuellen Semesterdaten."""
-        cursor = self.execute(
-            "SELECT semester_start, semester_end FROM settings WHERE id = 1"
-        )
-        row = cursor.fetchone()
-        if row:
-            return {
-                'semester_start': row['semester_start'],
-                'semester_end': row['semester_end']
-            }
-        return None
+        """Holt die aktuellen Semesterdaten.
+        
+        DEPRECATED: Verwende self.semesters.get_current() stattdessen.
+        """
+        return self.semesters.get_current()
+    
+    def save_semester_to_history(self, start_date: str, end_date: str, 
+                                 name: str = None, notes: str = None) -> int:
+        """Speichert ein Halbjahr in der Historie.
+        
+        DEPRECATED: Verwende self.semesters.save_to_history() stattdessen.
+        """
+        return self.semesters.save_to_history(start_date, end_date, name, notes)
+    
+    def get_semester_history(self) -> list:
+        """Holt alle gespeicherten Halbjahre.
+        
+        DEPRECATED: Verwende self.semesters.get_history() stattdessen.
+        """
+        return self.semesters.get_history()
+    
+    def get_semester_by_date(self, date: str) -> dict:
+        """Findet das Halbjahr zu einem bestimmten Datum.
+        
+        DEPRECATED: Verwende self.semesters.get_by_date() stattdessen.
+        """
+        result = self.semesters.get_by_date(date)
+        return result if result else None
+    
+    def delete_semester_from_history(self, semester_id: int) -> None:
+        """Löscht ein Halbjahr aus der Historie.
+        
+        DEPRECATED: Verwende self.semesters.delete_from_history() stattdessen.
+        """
+        self.semesters.delete_from_history(semester_id)
 
     # Hilfsmethode für Datenbankoperationen
     def execute(self, query: str, params: tuple = None):
@@ -778,335 +733,67 @@ class DatabaseManager:
     #         raise Exception(f"Fehler beim Abrufen der Note: {e}")
 
     def add_lesson_competency(self, lesson_id: int, competency_id: int) -> None:
-        """Fügt eine Verknüpfung zwischen Unterrichtsstunde und Kompetenz hinzu."""
-        try:
-            self.execute(
-                "INSERT INTO lesson_competencies (lesson_id, competency_id) VALUES (?, ?)",
-                (lesson_id, competency_id)
-            )
-        except sqlite3.IntegrityError:
-            # Falls die Verknüpfung bereits existiert, ignorieren wir den Fehler
-            pass
-        except Exception as e:
-            raise Exception(f"Fehler beim Verknüpfen von Stunde und Kompetenz: {str(e)}")
+        """Fügt eine Verknüpfung zwischen Unterrichtsstunde und Kompetenz hinzu.
+        
+        DEPRECATED: Verwende self.lessons.add_competency() stattdessen.
+        """
+        self.lessons.add_competency(lesson_id, competency_id)
 
     def get_lesson(self, lesson_id: int) -> dict:
-            """Holt eine einzelne Unterrichtsstunde."""
-            cursor = self.execute(
-                "SELECT * FROM lessons WHERE id = ?",
-                (lesson_id,)
-            )
-            result = cursor.fetchone()
-            return dict(result) if result else None
+        """Holt eine einzelne Unterrichtsstunde.
+        
+        DEPRECATED: Verwende self.lessons.get_by_id() stattdessen.
+        """
+        result = self.lessons.get_by_id(lesson_id)
+        return result if result else None
 
     def get_competency(self, comp_id: int) -> dict:
-        """Holt eine einzelne Kompetenz."""
-        cursor = self.execute(
-            "SELECT * FROM competencies WHERE id = ?",
-            (comp_id,)
-        )
-        result = cursor.fetchone()
-        return dict(result) if result else None
+        """Holt eine einzelne Kompetenz.
+        
+        DEPRECATED: Verwende self.competencies.get_by_id() stattdessen.
+        """
+        result = self.competencies.get_by_id(comp_id)
+        return result if result else None
 
     def update_lesson(self, lesson_id: int, data: dict, update_all_following: bool = False) -> List[int]:
         """Aktualisiert eine oder mehrere Unterrichtsstunden.
         
-        Args:
-            lesson_id: ID der zu ändernden Stunde
-            data: Dictionary mit den neuen Daten (course_id, date, time, subject, topic)
-            update_all_following: Bool, ob alle folgenden Stunden auch geändert werden sollen
-            
-        Returns:
-            Liste der IDs aller geänderten Stunden
+        DEPRECATED: Verwende self.lessons.update() stattdessen.
         """
-        try:
-            # Aktuelle Stunde und deren Hash holen
-            current_lesson = self.get_lesson(lesson_id)
-            if not current_lesson:
-                raise ValueError("Stunde nicht gefunden")
-                
-            if update_all_following and current_lesson['recurring_hash']:
-                # Aktualisiere alle folgenden Stunden mit gleichem Hash
-                update_fields = []
-                values = []
-                for key, value in data.items():
-                    if key not in ['id', 'created_at', 'date']:  # date nicht ändern!
-                        update_fields.append(f"{key} = ?")
-                        values.append(value)
-                
-                # Füge WHERE-Klausel Parameter hinzu
-                values.extend([
-                    current_lesson['recurring_hash'],
-                    current_lesson['date']  # Nur Stunden ab dem aktuellen Datum
-                ])
-                
-                query = f"""
-                    UPDATE lessons 
-                    SET {', '.join(update_fields)}
-                    WHERE recurring_hash = ?
-                    AND date >= ?
-                """
-                
-                self.execute(query, tuple(values))
-                
-                # Hole IDs aller geänderten Stunden
-                cursor = self.execute(
-                    """SELECT id FROM lessons 
-                    WHERE recurring_hash = ? 
-                    AND date >= ?""",
-                    (current_lesson['recurring_hash'], 
-                    current_lesson['date'])
-                )
-                return [row['id'] for row in cursor.fetchall()]
-                
-            else:
-                # Nur einzelne Stunde aktualisieren
-                update_fields = []
-                values = []
-                for key, value in data.items():
-                    if key not in ['id', 'created_at', 'recurring_hash']:
-                        update_fields.append(f"{key} = ?")
-                        values.append(value)
-                
-                values.append(lesson_id)
-                query = f"""
-                    UPDATE lessons 
-                    SET {', '.join(update_fields)}
-                    WHERE id = ?
-                """
-                
-                self.execute(query, tuple(values))
-                return [lesson_id]
-                
-        except Exception as e:
-            raise Exception(f"Fehler beim Aktualisieren der Stunde(n): {str(e)}")
+        return self.lessons.update(lesson_id, data, update_all_following)
 
 
-    def update_competency(self, comp_id: int, data: dict) -> None:
-        """Aktualisiert eine Kompetenz."""
-        self.execute(
-            """UPDATE competencies 
-            SET subject = ?, area = ?, description = ? 
-            WHERE id = ?""",
-            (data['subject'], data['area'], data['description'], comp_id)
-        )
-    def delete_student(self, student_id: int) -> None:
-        """Löscht einen Schüler."""
-        try:
-            self.execute("DELETE FROM students WHERE id = ?", (student_id,))
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Löschen des Schülers: {e}")
-
-    def delete_lessons(self, lesson_id: int, delete_all_following: bool = False) -> None:
-        """Löscht eine oder mehrere Unterrichtsstunden.
-        
-        Args:
-            lesson_id: ID der zu löschenden Stunde
-            delete_all_following: Bool, ob alle folgenden Stunden auch gelöscht werden sollen
-        """
-        try:
-            # Aktuelle Stunde und deren Hash holen
-            current_lesson = self.get_lesson(lesson_id)
-            if not current_lesson:
-                raise ValueError("Stunde nicht gefunden")
-                
-            if delete_all_following and current_lesson['recurring_hash']:
-                # Alle folgenden Stunden mit gleichem Hash löschen
-                self.execute(
-                    """DELETE FROM lessons 
-                    WHERE recurring_hash = ?
-                    AND date >= ?""",
-                    (current_lesson['recurring_hash'],
-                    current_lesson['date'])
-                )
-            else:
-                # Nur einzelne Stunde löschen
-                self.execute(
-                    "DELETE FROM lessons WHERE id = ?",
-                    (lesson_id,)
-                )
-                
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen der Stunde(n): {str(e)}")
-
-    def delete_competency(self, comp_id: int) -> None:
-        """Löscht eine Kompetenz."""
-        try:
-            self.execute("DELETE FROM competencies WHERE id = ?", (comp_id,))
-            # Zugehörige Zuordnungen löschen
-            self.execute("DELETE FROM lesson_competencies WHERE competency_id = ?", (comp_id,))
-        except sqlite3.Error as e:
-            raise Exception(f"Fehler beim Löschen der Kompetenz: {e}")
-
-
-    def get_lesson(self, lesson_id: int) -> dict:
-        """Holt eine einzelne Unterrichtsstunde mit Kursinformationen."""
-        cursor = self.execute(
-            """SELECT l.*, c.name as course_name, c.subject as course_subject
-            FROM lessons l
-            JOIN courses c ON l.course_id = c.id
-            WHERE l.id = ?""",
-            (lesson_id,)
-        )
-        result = cursor.fetchone()
-        return dict(result) if result else None
-
-
-    def save_semester_to_history(self, start_date: str, end_date: str, name: str = None, notes: str = None) -> int:
-        """Speichert ein Halbjahr in der Historie."""
-        cursor = self.execute(
-            """INSERT INTO semester_history (start_date, end_date, name, notes)
-            VALUES (?, ?, ?, ?)""",
-            (start_date, end_date, name, notes)
-        )
-        return cursor.lastrowid
-
-    def get_semester_history(self) -> list:
-        """Holt alle gespeicherten Halbjahre."""
-        cursor = self.execute(
-            """SELECT * FROM semester_history 
-            ORDER BY start_date DESC"""
-        )
-        return [dict(row) for row in cursor.fetchall()]
-
-    def get_semester_by_date(self, date: str) -> dict:
-        """Findet das Halbjahr zu einem bestimmten Datum."""
-        cursor = self.execute(
-            """SELECT * FROM semester_history 
-            WHERE start_date <= ? AND end_date >= ?
-            ORDER BY start_date DESC LIMIT 1""",
-            (date, date)
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-    def delete_semester_from_history(self, semester_id: int) -> None:
-        """Löscht ein Halbjahr aus der Historie."""
-        self.execute(
-            "DELETE FROM semester_history WHERE id = ?",
-            (semester_id,)
-        )
 
 
     def get_all_courses(self) -> list:
-        """Holt alle verfügbaren Kurse und Klassen."""
-        try:
-            cursor = self.execute(
-                """SELECT id, name, type, subject 
-                   FROM courses 
-                   ORDER BY name"""
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Kurse: {str(e)}")
-
-    def generate_recurring_hash(self, course_id: int, weekday: int, time: str) -> str:
-        """Generiert einen Hash für wiederkehrende Stunden.
+        """Holt alle verfügbaren Kurse und Klassen.
         
-        Args:
-            course_id: ID des Kurses
-            weekday: Wochentag als int (1=Montag, 7=Sonntag)
-            time: Uhrzeit im Format "HH:MM"
-            
-        Returns:
-            Hash-String für diese Kombination
+        DEPRECATED: Verwende self.courses.get_all() stattdessen.
         """
-        return f"rec_{course_id}_{weekday}_{time.replace(':', '')}"
-
-    def delete_lessons(self, lesson_id: int, delete_all_following: bool = False) -> None:
-        """Löscht eine oder mehrere Unterrichtsstunden.
+        return self.courses.get_all()
+    
+    def get_courses_by_semester(self, semester_id: int) -> list:
+        """Holt alle Kurse eines bestimmten Semesters.
         
-        Args:
-            lesson_id: ID der zu löschenden Stunde
-            delete_all_following: Bool, ob alle folgenden Stunden auch gelöscht werden sollen
+        DEPRECATED: Verwende self.courses.get_by_semester() stattdessen.
         """
-        try:
-            # Aktuelle Stunde und deren Hash holen
-            current_lesson = self.get_lesson(lesson_id)
-            if not current_lesson:
-                raise ValueError("Stunde nicht gefunden")
-                
-            if delete_all_following and current_lesson['recurring_hash']:
-                # Alle folgenden Stunden mit gleichem Hash löschen
-                self.execute(
-                    """DELETE FROM lessons 
-                    WHERE recurring_hash = ?
-                    AND date >= ?""",
-                    (current_lesson['recurring_hash'],
-                    current_lesson['date'])
-                )
-            else:
-                # Nur einzelne Stunde löschen
-                self.execute(
-                    "DELETE FROM lessons WHERE id = ?",
-                    (lesson_id,)
-                )
-                
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen der Stunde(n): {str(e)}")
+        return self.courses.get_by_semester(semester_id)
+
 
     def get_time_settings(self) -> dict:
         """Holt die Zeiteinstellungen aus der Datenbank.
         
-        Returns:
-            dict: Dictionary mit first_lesson_start, lesson_duration und breaks
-                oder None wenn keine Einstellungen gefunden
+        DEPRECATED: Verwende self.settings.get_time_settings() stattdessen.
         """
-        try:
-            # Hole Grundeinstellungen
-            cursor = self.execute(
-                "SELECT first_lesson_start, lesson_duration FROM timetable_settings WHERE id = 1"
-            )
-            settings = cursor.fetchone()
-            
-            if not settings:
-                return None
-                
-            # Hole Pausen
-            cursor = self.execute(
-                "SELECT after_lesson, duration FROM breaks ORDER BY after_lesson"
-            )
-            breaks = cursor.fetchall()
-            
-            return {
-                'first_lesson_start': settings['first_lesson_start'],
-                'lesson_duration': settings['lesson_duration'],
-                'breaks': [(b['after_lesson'], b['duration']) for b in breaks]
-            }
-            
-        except Exception as e:
-            print(f"Fehler beim Laden der Zeiteinstellungen: {str(e)}")
-            return None
+        return self.settings.get_time_settings()
 
 
     def get_previous_lesson_homework(self, course_id: int, date: str, time: str) -> Optional[str]:
         """Holt die Hausaufgaben der vorherigen Stunde eines Kurses.
         
-        Args:
-            course_id: ID des Kurses
-            date: Datum der aktuellen Stunde
-            time: Uhrzeit der aktuellen Stunde
-            
-        Returns:
-            Hausaufgaben der vorherigen Stunde oder None
+        DEPRECATED: Verwende self.lessons.get_previous_homework() stattdessen.
         """
-        try:
-            query = """
-                SELECT homework
-                FROM lessons
-                WHERE course_id = ? 
-                AND (date < ? OR (date = ? AND time < ?))
-                AND homework IS NOT NULL
-                ORDER BY date DESC, time DESC
-                LIMIT 1
-            """
-            cursor = self.execute(query, (course_id, date, date, time))
-            result = cursor.fetchone()
-            return result['homework'] if result else None
-                
-        except Exception as e:
-            print(f"Fehler beim Laden der vorherigen Hausaufgaben: {str(e)}")
-            return None
+        return self.lessons.get_previous_homework(course_id, date, time)
 
     def get_courses_by_semester(self, semester_id: int) -> list:
         """Holt alle Kurse eines bestimmten Semesters."""
@@ -1147,336 +834,171 @@ class DatabaseManager:
             raise Exception(f"Fehler beim Laden der Schüler: {str(e)}")
 
 
-# Neue Methoden für die Verwaltung von Notensystemen:
+# Neue Methoden für die Verwaltung von Notensystemen (delegieren an GradingSystemRepository):
 
     def add_grading_system(self, name: str, min_grade: float, max_grade: float, 
                           step_size: float, description: str = None) -> int:
-        """Fügt ein neues Notensystem hinzu."""
-        try:
-            cursor = self.execute(
-                """INSERT INTO grading_systems 
-                   (name, min_grade, max_grade, step_size, description)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (name, min_grade, max_grade, step_size, description)
-            )
-            return cursor.lastrowid
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen des Notensystems: {str(e)}")
+        """Fügt ein neues Notensystem hinzu.
+        
+        DEPRECATED: Verwende self.grading_systems.add() stattdessen.
+        """
+        return self.grading_systems.add(name, min_grade, max_grade, step_size, description)
 
     def get_grading_system(self, system_id: int) -> dict:
-        """Holt ein einzelnes Notensystem."""
-        try:
-            cursor = self.execute(
-                "SELECT * FROM grading_systems WHERE id = ?",
-                (system_id,)
-            )
-            result = cursor.fetchone()
-            return dict(result) if result else None
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen des Notensystems: {str(e)}")
+        """Holt ein einzelnes Notensystem.
+        
+        DEPRECATED: Verwende self.grading_systems.get_by_id() stattdessen.
+        """
+        result = self.grading_systems.get_by_id(system_id)
+        return result if result else None
 
     def get_all_grading_systems(self) -> list:
-        """Holt alle verfügbaren Notensysteme."""
-        try:
-            cursor = self.execute(
-                "SELECT * FROM grading_systems ORDER BY name"
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Notensysteme: {str(e)}")
+        """Holt alle verfügbaren Notensysteme.
+        
+        DEPRECATED: Verwende self.grading_systems.get_all() stattdessen.
+        """
+        return self.grading_systems.get_all()
 
     def update_grading_system(self, system_id: int, name: str, min_grade: float,
                             max_grade: float, step_size: float, description: str = None) -> None:
-        """Aktualisiert ein bestehendes Notensystem."""
-        try:
-            self.execute(
-                """UPDATE grading_systems 
-                   SET name = ?, min_grade = ?, max_grade = ?, 
-                       step_size = ?, description = ?
-                   WHERE id = ?""",
-                (name, min_grade, max_grade, step_size, description, system_id)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Aktualisieren des Notensystems: {str(e)}")
+        """Aktualisiert ein bestehendes Notensystem.
+        
+        DEPRECATED: Verwende self.grading_systems.update() stattdessen.
+        """
+        self.grading_systems.update(system_id, name, min_grade, max_grade, step_size, description)
 
     def delete_grading_system(self, system_id: int) -> None:
-        """Löscht ein Notensystem."""
-        try:
-            self.execute(
-                "DELETE FROM grading_systems WHERE id = ?",
-                (system_id,)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen des Notensystems: {str(e)}")
+        """Löscht ein Notensystem.
+        
+        DEPRECATED: Verwende self.grading_systems.delete() stattdessen.
+        """
+        self.grading_systems.delete(system_id)
 
     def validate_grade(self, grade: float, system_id: int) -> bool:
-        """Prüft ob eine Note in einem Notensystem gültig ist."""
-        try:
-            system = self.get_grading_system(system_id)
-            if not system:
-                raise ValueError("Notensystem nicht gefunden")
-                
-            # Prüfe ob Note im erlaubten Bereich liegt
-            if grade < system['min_grade'] or grade > system['max_grade']:
-                return False
-                
-            # Prüfe ob Note ein gültiger Schritt ist
-            steps = round((grade - system['min_grade']) / system['step_size'])
-            valid_grade = system['min_grade'] + (steps * system['step_size'])
-            
-            # Berücksichtige Rundungsfehler
-            return abs(grade - valid_grade) < 0.0001
-            
-        except Exception as e:
-            raise Exception(f"Fehler bei der Notenvalidierung: {str(e)}")
+        """Prüft ob eine Note in einem Notensystem gültig ist.
+        
+        DEPRECATED: Verwende self.grading_systems.validate_grade() stattdessen.
+        """
+        return self.grading_systems.validate_grade(grade, system_id)
+    
+    def get_course_grading_system(self, course_id: int) -> dict:
+        """Holt das Notensystem für einen Kurs über dessen Template.
+        
+        DEPRECATED: Verwende self.grading_systems.get_by_course() stattdessen.
+        """
+        result = self.grading_systems.get_by_course(course_id)
+        return result if result else None
 
 # Neue Methoden für die Verwaltung von Templates:
 
     def add_assessment_template(self, name: str, subject: str, 
                               grading_system_id: int, description: str = None) -> int:
-        """Fügt eine neue Bewertungstyp-Vorlage hinzu."""
-        try:
-            cursor = self.execute(
-                """INSERT INTO assessment_type_templates 
-                   (name, subject, grading_system_id, description)
-                   VALUES (?, ?, ?, ?)""",
-                (name, subject, grading_system_id, description)
-            )
-            return cursor.lastrowid
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen der Vorlage: {str(e)}")
+        """Fügt eine neue Bewertungstyp-Vorlage hinzu.
+        
+        DEPRECATED: Verwende self.assessment_templates.add() stattdessen.
+        """
+        return self.assessment_templates.add(name, subject, grading_system_id, description)
 
     def add_template_item(self, template_id: int, name: str, 
                          parent_item_id: int = None, default_weight: float = 1.0) -> int:
-        """Fügt einen Bewertungstyp zu einer Vorlage hinzu."""
-        try:
-            cursor = self.execute(
-                """INSERT INTO template_items 
-                   (template_id, name, parent_item_id, default_weight)
-                   VALUES (?, ?, ?, ?)""",
-                (template_id, name, parent_item_id, default_weight)
-            )
-            return cursor.lastrowid
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen des Vorlagenelements: {str(e)}")
+        """Fügt einen Bewertungstyp zu einer Vorlage hinzu.
+        
+        DEPRECATED: Verwende self.assessment_templates.add_item() stattdessen.
+        """
+        return self.assessment_templates.add_item(template_id, name, parent_item_id, default_weight)
 
     def get_assessment_template(self, template_id: int) -> dict:
-        """Holt eine einzelne Bewertungstyp-Vorlage."""
-        try:
-            cursor = self.execute(
-                """SELECT t.*, g.name as grading_system_name
-                   FROM assessment_type_templates t
-                   JOIN grading_systems g ON t.grading_system_id = g.id
-                   WHERE t.id = ?""",
-                (template_id,)
-            )
-            result = cursor.fetchone()
-            return dict(result) if result else None
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Vorlage: {str(e)}")
+        """Holt eine einzelne Bewertungstyp-Vorlage.
+        
+        DEPRECATED: Verwende self.assessment_templates.get_by_id() stattdessen.
+        """
+        result = self.assessment_templates.get_by_id(template_id)
+        return result if result else None
 
     def get_template_items(self, template_id: int) -> list:
-        """Holt alle Bewertungstypen einer Vorlage hierarchisch sortiert."""
-        try:
-            # Zuerst die Root-Items (ohne parent)
-            cursor = self.execute(
-                """WITH RECURSIVE template_tree AS (
-                    -- Root items (ohne parent)
-                    SELECT id, name, parent_item_id, default_weight, 
-                           0 as level, CAST(name as TEXT) as path
-                    FROM template_items
-                    WHERE template_id = ? AND parent_item_id IS NULL
-                    
-                    UNION ALL
-                    
-                    -- Child items
-                    SELECT i.id, i.name, i.parent_item_id, i.default_weight,
-                           tt.level + 1, 
-                           tt.path || '>' || i.name
-                    FROM template_items i
-                    JOIN template_tree tt ON i.parent_item_id = tt.id
-                )
-                SELECT * FROM template_tree
-                ORDER BY path;""",
-                (template_id,)
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Vorlagenelemente: {str(e)}")
+        """Holt alle Bewertungstypen einer Vorlage hierarchisch sortiert.
+        
+        DEPRECATED: Verwende self.assessment_templates.get_items() stattdessen.
+        """
+        return self.assessment_templates.get_items(template_id)
 
     def get_templates_by_subject(self, subject: str) -> list:
-        """Holt alle Vorlagen für ein bestimmtes Fach."""
-        try:
-            cursor = self.execute(
-                """SELECT t.*, g.name as grading_system_name,
-                          (SELECT COUNT(*) FROM template_items 
-                           WHERE template_id = t.id) as item_count
-                   FROM assessment_type_templates t
-                   JOIN grading_systems g ON t.grading_system_id = g.id
-                   WHERE t.subject = ?
-                   ORDER BY t.name""",
-                (subject,)
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Vorlagen: {str(e)}")
+        """Holt alle Vorlagen für ein bestimmtes Fach.
+        
+        DEPRECATED: Verwende self.assessment_templates.get_by_subject() stattdessen.
+        """
+        return self.assessment_templates.get_by_subject(subject)
 
     def update_assessment_template(self, template_id: int, name: str, 
                                  subject: str, grading_system_id: int, 
                                  description: str = None) -> None:
-        """Aktualisiert eine bestehende Vorlage."""
-        try:
-            self.execute(
-                """UPDATE assessment_type_templates 
-                   SET name = ?, subject = ?, 
-                       grading_system_id = ?, description = ?
-                   WHERE id = ?""",
-                (name, subject, grading_system_id, description, template_id)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Aktualisieren der Vorlage: {str(e)}")
+        """Aktualisiert eine bestehende Vorlage.
+        
+        DEPRECATED: Verwende self.assessment_templates.update() stattdessen.
+        """
+        self.assessment_templates.update(template_id, name, subject, grading_system_id, description)
 
     def update_template_item(self, item_id: int, name: str, 
                            parent_item_id: int = None, 
                            default_weight: float = 1.0) -> None:
-        """Aktualisiert ein Vorlagenelement."""
-        try:
-            self.execute(
-                """UPDATE template_items 
-                   SET name = ?, parent_item_id = ?, default_weight = ?
-                   WHERE id = ?""",
-                (name, parent_item_id, default_weight, item_id)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Aktualisieren des Vorlagenelements: {str(e)}")
+        """Aktualisiert ein Vorlagenelement.
+        
+        DEPRECATED: Verwende self.assessment_templates.update_item() stattdessen.
+        """
+        self.assessment_templates.update_item(item_id, name, parent_item_id, default_weight)
 
     def delete_assessment_template(self, template_id: int) -> None:
-        """Löscht eine Vorlage und alle ihre Elemente."""
-        # Dank ON DELETE CASCADE werden auch alle template_items gelöscht
-        try:
-            self.execute(
-                "DELETE FROM assessment_type_templates WHERE id = ?",
-                (template_id,)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen der Vorlage: {str(e)}")
+        """Löscht eine Vorlage und alle ihre Elemente.
+        
+        DEPRECATED: Verwende self.assessment_templates.delete() stattdessen.
+        """
+        self.assessment_templates.delete(template_id)
 
     def delete_template_item(self, item_id: int) -> None:
-        """Löscht ein Vorlagenelement."""
-        try:
-            self.execute(
-                "DELETE FROM template_items WHERE id = ?",
-                (item_id,)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen des Vorlagenelements: {str(e)}")
+        """Löscht ein Vorlagenelement.
+        
+        DEPRECATED: Verwende self.assessment_templates.delete_item() stattdessen.
+        """
+        self.assessment_templates.delete_item(item_id)
+    
+    def get_all_assessment_templates(self) -> list:
+        """Holt alle Bewertungsvorlagen mit zugehörigen Notensystemen.
+        
+        DEPRECATED: Verwende self.assessment_templates.get_all() stattdessen.
+        """
+        return self.assessment_templates.get_all()
 
 
 # Neue Methoden für die Verwaltung von Assessment Types:
 
     def create_assessment_types_from_template(self, course_id: int, template_id: int) -> None:
-        """Erstellt Bewertungstypen für einen Kurs basierend auf einer Vorlage."""
-        try:
-            # Hole alle Template-Items
-            template_items = self.get_template_items(template_id)
-            if not template_items:
-                # Statt Nachricht anzuzeigen, werfen wir eine spezielle Exception
-                raise ValueError("Die ausgewählte Vorlage enthält noch keine Bewertungstypen.")
-
-            # Dictionary zum Speichern der ID-Zuordnungen
-            id_mapping = {}
-
-            # Items der Reihe nach einfügen (sind bereits hierarchisch sortiert)
-            for item in template_items:
-                # Wenn es ein Parent-Item gibt, nutze die gemappte ID
-                parent_id = None
-                if item['parent_item_id']:
-                    parent_id = id_mapping.get(item['parent_item_id'])
-
-                # Füge neuen Assessment Type hinzu
-                new_id = self.add_assessment_type(
-                    course_id=course_id,
-                    name=item['name'],
-                    parent_type_id=parent_id,
-                    weight=item['default_weight']
-                )
-                
-                # Speichere ID-Zuordnung
-                id_mapping[item['id']] = new_id
-
-        except Exception as e:
-            raise Exception(f"Fehler beim Erstellen der Bewertungstypen: {str(e)}")
+        """Erstellt Bewertungstypen für einen Kurs basierend auf einer Vorlage.
+        
+        DEPRECATED: Verwende self.assessment_types.create_from_template() stattdessen.
+        """
+        self.assessment_types.create_from_template(course_id, template_id)
 
     def add_assessment_type(self, course_id: int, name: str, 
                           parent_type_id: int = None, weight: float = 1.0) -> int:
-        """Fügt einen neuen Bewertungstyp hinzu."""
-        try:
-            cursor = self.execute(
-                """INSERT INTO assessment_types 
-                   (course_id, name, parent_type_id, weight)
-                   VALUES (?, ?, ?, ?)""",
-                (course_id, name, parent_type_id, weight)
-            )
-            return cursor.lastrowid
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen des Bewertungstyps: {str(e)}")
+        """Fügt einen neuen Bewertungstyp hinzu.
+        
+        DEPRECATED: Verwende self.assessment_types.add() stattdessen.
+        """
+        return self.assessment_types.add(course_id, name, parent_type_id, weight)
 
     def get_assessment_types(self, course_id: int) -> list:
-        """Holt alle Bewertungstypen eines Kurses hierarchisch sortiert."""
-        try:
-            cursor = self.execute(
-                """WITH RECURSIVE type_tree AS (
-                    -- Root types (ohne parent)
-                    SELECT id, name, parent_type_id, weight, 
-                           0 as level, CAST(name as TEXT) as path
-                    FROM assessment_types
-                    WHERE course_id = ? AND parent_type_id IS NULL
-                    
-                    UNION ALL
-                    
-                    -- Child types
-                    SELECT t.id, t.name, t.parent_type_id, t.weight,
-                           tt.level + 1, 
-                           tt.path || '>' || t.name
-                    FROM assessment_types t
-                    JOIN type_tree tt ON t.parent_type_id = tt.id
-                )
-                SELECT * FROM type_tree
-                ORDER BY path;""",
-                (course_id,)
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Bewertungstypen: {str(e)}")
+        """Holt alle Bewertungstypen eines Kurses hierarchisch sortiert.
+        
+        DEPRECATED: Verwende self.assessment_types.get_by_course() stattdessen.
+        """
+        return self.assessment_types.get_by_course(course_id)
 
     def delete_assessment_type(self, type_id: int) -> None:
         """Löscht einen Bewertungstyp und alle zugehörigen Untertypen.
         
-        Args:
-            type_id: ID des zu löschenden Bewertungstyps
+        DEPRECATED: Verwende self.assessment_types.delete() stattdessen.
         """
-        try:
-            # Prüfe ob der Typ bereits für Bewertungen verwendet wurde
-            cursor = self.execute(
-                "SELECT COUNT(*) as count FROM assessments WHERE assessment_type_id = ?",
-                (type_id,)
-            )
-            result = cursor.fetchone()
-            if result['count'] > 0:
-                raise ValueError(
-                    "Dieser Bewertungstyp wurde bereits für Noten verwendet und "
-                    "kann nicht gelöscht werden."
-                )
-
-            # Lösche rekursiv alle untergeordneten Typen
-            # Dies funktioniert dank ON DELETE CASCADE in der Datenbank
-            self.execute(
-                "DELETE FROM assessment_types WHERE id = ?",
-                (type_id,)
-            )
-            
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen des Bewertungstyps: {str(e)}")
+        self.assessment_types.delete(type_id)
 
 # Neue Methoden für die Verwaltung von Assessments (Noten):
 
@@ -1714,198 +1236,53 @@ class DatabaseManager:
             return None
 
     def add_assessment(self, data: dict) -> int:
-        """Fügt eine neue Bewertung/Note hinzu oder aktualisiert eine bestehende."""
-        try:
-            # Prüfe ob bereits eine Note existiert
-            cursor = self.execute(
-                """SELECT id FROM assessments 
-                WHERE student_id = ? AND lesson_id = ?""",
-                (data['student_id'], data['lesson_id'])
-            )
-            existing = cursor.fetchone()
-
-            if existing:
-                # Update existierende Note
-                cursor = self.execute(
-                    """UPDATE assessments 
-                    SET grade = ?, assessment_type_id = ?, 
-                        course_id = ?, date = ?, 
-                        topic = ?, comment = ?, weight = ?
-                    WHERE student_id = ? AND lesson_id = ?""",
-                    (data['grade'], 
-                    data['assessment_type_id'],
-                    data['course_id'],
-                    data['date'],
-                    data.get('topic'),
-                    data.get('comment'),  # Kommentar hinzugefügt
-                    data.get('weight', 1.0),
-                    data['student_id'],
-                    data['lesson_id'])
-                )
-                return existing['id']
-            else:
-                # Füge neue Note hinzu
-                cursor = self.execute(
-                    """INSERT INTO assessments 
-                    (student_id, course_id, assessment_type_id, grade,
-                        date, lesson_id, topic, comment, weight)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (data['student_id'], 
-                    data['course_id'],
-                    data['assessment_type_id'], 
-                    data['grade'],
-                    data['date'],
-                    data['lesson_id'],
-                    data.get('topic'),
-                    data.get('comment'),  # Kommentar hinzugefügt
-                    data.get('weight', 1.0))
-                )
-                return cursor.lastrowid
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen/Aktualisieren der Note: {str(e)}")
+        """Fügt eine neue Bewertung/Note hinzu oder aktualisiert eine bestehende.
+        
+        DEPRECATED: Verwende self.assessments.add_or_update() stattdessen.
+        """
+        return self.assessments.add_or_update(data)
 
     def delete_assessment(self, student_id: int, lesson_id: int) -> None:
-        """Löscht eine Note für einen Schüler in einer bestimmten Stunde."""
-        try:
-            self.execute(
-                """DELETE FROM assessments 
-                WHERE student_id = ? AND lesson_id = ?""",
-                (student_id, lesson_id)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen der Note: {str(e)}")
+        """Löscht eine Note für einen Schüler in einer bestimmten Stunde.
+        
+        DEPRECATED: Verwende self.assessments.delete() stattdessen.
+        """
+        self.assessments.delete(student_id, lesson_id)
 
     def get_student_assessments(self, student_id: int, course_id: int) -> list:
-        """Holt alle Noten eines Schülers in einem Kurs."""
-        try:
-            cursor = self.execute(
-                """SELECT a.*, t.name as type_name, t.weight as type_weight
-                   FROM assessments a
-                   JOIN assessment_types t ON a.assessment_type_id = t.id
-                   WHERE a.student_id = ? AND a.course_id = ?
-                   ORDER BY a.date DESC""",
-                (student_id, course_id)
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Noten: {str(e)}")
+        """Holt alle Noten eines Schülers in einem Kurs.
+        
+        DEPRECATED: Verwende self.assessments.get_by_student_and_course() stattdessen.
+        """
+        return self.assessments.get_by_student_and_course(student_id, course_id)
 
     def get_lesson_assessment(self, student_id: int, lesson_id: int) -> Optional[dict]:
-        """Holt die Note eines Schülers für eine bestimmte Stunde."""
-        try:
-            cursor = self.execute(
-                """SELECT * FROM assessments 
-                WHERE student_id = ? AND lesson_id = ?""",
-                (student_id, lesson_id)
-            )
-            result = cursor.fetchone()
-            return dict(result) if result else None
-        except Exception as e:
-            raise Exception(f"Fehler beim Laden der Note: {str(e)}")
+        """Holt die Note eines Schülers für eine bestimmte Stunde.
+        
+        DEPRECATED: Verwende self.assessments.get_by_lesson() stattdessen.
+        """
+        return self.assessments.get_by_lesson(student_id, lesson_id)
 
     def get_course_assessments(self, course_id: int, assessment_type_id: int = None) -> list:
-        """Holt alle Noten eines Kurses, optional gefiltert nach Bewertungstyp."""
-        try:
-            if assessment_type_id:
-                cursor = self.execute(
-                    """SELECT a.*, s.name as student_name, t.name as type_name
-                       FROM assessments a
-                       JOIN students s ON a.student_id = s.id
-                       JOIN assessment_types t ON a.assessment_type_id = t.id
-                       WHERE a.course_id = ? AND a.assessment_type_id = ?
-                       ORDER BY s.name, a.date DESC""",
-                    (course_id, assessment_type_id)
-                )
-            else:
-                cursor = self.execute(
-                    """SELECT a.*, s.name as student_name, t.name as type_name
-                       FROM assessments a
-                       JOIN students s ON a.student_id = s.id
-                       JOIN assessment_types t ON a.assessment_type_id = t.id
-                       WHERE a.course_id = ?
-                       ORDER BY s.name, t.name, a.date DESC""",
-                    (course_id,)
-                )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Abrufen der Kursnoten: {str(e)}")
+        """Holt alle Noten eines Kurses, optional gefiltert nach Bewertungstyp.
+        
+        DEPRECATED: Verwende self.assessments.get_by_course() stattdessen.
+        """
+        return self.assessments.get_by_course(course_id, assessment_type_id)
 
     def calculate_final_grade(self, student_id: int, course_id: int) -> float:
-        """Berechnet die Gesamtnote eines Schülers in einem Kurs."""
-        try:
-        # First check if student has any grades at all
-            cursor = self.execute(
-                """SELECT COUNT(*) as count 
-                FROM assessments 
-                WHERE student_id = ? AND course_id = ?""",
-                (student_id, course_id)
-            )
-            if cursor.fetchone()['count'] == 0:
-                return None
-            
-            # Hole alle Bewertungstypen und deren Gewichtungen
-            types = self.get_assessment_types(course_id)
-            if not types:
-                return None
-
-            # Berechne gewichtete Durchschnitte für jeden Typ
-            def calculate_type_average(type_id):
-                cursor = self.execute(
-                    """SELECT AVG(grade) as avg_grade
-                       FROM assessments
-                       WHERE student_id = ? AND course_id = ? 
-                             AND assessment_type_id = ?""",
-                    (student_id, course_id, type_id)
-                )
-                result = cursor.fetchone()
-                return result['avg_grade'] if result else None
-
-            # Nur Root-Level Typen (ohne parent) für Endnote
-            root_types = [t for t in types if not t['parent_type_id']]
-            
-            weighted_sum = 0
-            weight_sum = 0
-            
-            for type_data in root_types:
-                avg = calculate_type_average(type_data['id'])
-                if avg is not None:
-                    weighted_sum += avg * type_data['weight']
-                    weight_sum += type_data['weight']
-
-            return round(weighted_sum / weight_sum, 2) if weight_sum > 0 else None
-
-        except Exception as e:
-            raise Exception(f"Fehler bei der Notenberechnung: {str(e)}")
+        """Berechnet die Gesamtnote eines Schülers in einem Kurs.
+        
+        DEPRECATED: Verwende self.assessments.calculate_final_grade() stattdessen.
+        """
+        return self.assessments.calculate_final_grade(student_id, course_id)
 
     def get_student_course_grades(self, student_id: int) -> dict:
-        """Holt die Gesamtnoten eines Schülers für alle seine Kurse."""
-        try:
-            # Hole alle Kurse des Schülers
-            cursor = self.execute("""
-                SELECT DISTINCT c.id, c.name
-                FROM courses c
-                JOIN student_courses sc ON c.id = sc.course_id
-                WHERE sc.student_id = ?
-                ORDER BY c.name
-            """, (student_id,))
-            
-            courses = cursor.fetchall()
-            
-            # Berechne Noten für jeden Kurs
-            course_grades = {}
-            for course in courses:
-                final_grade = self.calculate_final_grade(student_id, course['id'])
-                if final_grade is not None:
-                    course_grades[course['id']] = {
-                        'name': course['name'],
-                        'final_grade': final_grade
-                    }
-                    
-            return course_grades
-            
-        except Exception as e:
-            print(f"DEBUG: Error in get_student_course_grades: {str(e)}")
-            raise#
+        """Holt die Gesamtnoten eines Schülers für alle seine Kurse.
+        
+        DEPRECATED: Verwende self.assessments.get_student_course_grades() stattdessen.
+        """
+        return self.assessments.get_student_course_grades(student_id)
 
     def get_student_competency_grades(self, student_id: int) -> dict:
         """Berechnet die Durchschnittsnoten pro Kompetenzbereich für jeden Kurs eines Schülers.
@@ -1982,86 +1359,30 @@ class DatabaseManager:
     def get_student_assessment_type_grades(self, student_id: int, course_id: int) -> list:
         """Holt die Durchschnittsnoten pro Assessment Type für einen bestimmten Kurs.
         
-        Args:
-            student_id: ID des Schülers
-            course_id: ID des Kurses
-
-        Returns:
-            list: Liste von Dictionaries mit Assessment Type Informationen und Noten
+        DEPRECATED: Verwende self.assessments.get_by_assessment_type() stattdessen.
         """
-        try:
-            cursor = self.execute("""
-                WITH RECURSIVE TypeHierarchy AS (
-                    -- Root types
-                    SELECT 
-                        id, name, weight, parent_type_id,
-                        name as path,
-                        0 as level
-                    FROM assessment_types
-                    WHERE course_id = ? AND parent_type_id IS NULL
-                    
-                    UNION ALL
-                    
-                    -- Child types
-                    SELECT 
-                        t.id, t.name, t.weight, t.parent_type_id,
-                        th.path || ' > ' || t.name,
-                        th.level + 1
-                    FROM assessment_types t
-                    JOIN TypeHierarchy th ON t.parent_type_id = th.id
-                ),
-                TypeGrades AS (
-                    SELECT 
-                        th.*,
-                        ROUND(AVG(a.grade * a.weight) / AVG(a.weight), 2) as average_grade,
-                        COUNT(a.id) as grade_count
-                    FROM TypeHierarchy th
-                    LEFT JOIN assessments a ON th.id = a.assessment_type_id 
-                        AND a.student_id = ?
-                    GROUP BY th.id
-                )
-                SELECT * FROM TypeGrades
-                ORDER BY path
-            """, (course_id, student_id))
-            
-            return cursor.fetchall()
-            
-        except Exception as e:
-            print(f"DEBUG: Error in get_student_assessment_type_grades: {str(e)}")
-            raise
+        return self.assessments.get_by_assessment_type(student_id, course_id)
         
     def mark_student_absent(self, lesson_id: int, student_id: int) -> None:
-        """Markiert einen Schüler als abwesend für eine Stunde."""
-        try:
-            self.execute(
-                """INSERT OR REPLACE INTO student_attendance 
-                (student_id, lesson_id)
-                VALUES (?, ?)""",
-                (student_id, lesson_id)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Markieren der Abwesenheit: {str(e)}")
+        """Markiert einen Schüler als abwesend für eine Stunde.
+        
+        DEPRECATED: Verwende self.attendance.mark_absent() stattdessen.
+        """
+        self.attendance.mark_absent(lesson_id, student_id)
 
     def mark_student_present(self, lesson_id: int, student_id: int) -> None:
-        """Löscht einen Abwesenheitseintrag (= Schüler war anwesend)."""
-        try:
-            self.execute(
-                "DELETE FROM student_attendance WHERE lesson_id = ? AND student_id = ?",
-                (lesson_id, student_id)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Markieren der Anwesenheit: {str(e)}")
+        """Löscht einen Abwesenheitseintrag (= Schüler war anwesend).
+        
+        DEPRECATED: Verwende self.attendance.mark_present() stattdessen.
+        """
+        self.attendance.mark_present(lesson_id, student_id)
 
     def get_absent_students(self, lesson_id: int) -> List[int]:
-        """Holt die IDs aller abwesenden Schüler für eine Stunde."""
-        try:
-            cursor = self.execute(
-                "SELECT student_id FROM student_attendance WHERE lesson_id = ?",
-                (lesson_id,)
-            )
-            return [row['student_id'] for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Laden der Abwesenheiten: {str(e)}")
+        """Holt die IDs aller abwesenden Schüler für eine Stunde.
+        
+        DEPRECATED: Verwende self.attendance.get_absent_students() stattdessen.
+        """
+        return self.attendance.get_absent_students(lesson_id)
 
 
     def get_all_assessment_templates(self) -> list:
@@ -2127,141 +1448,64 @@ class DatabaseManager:
 
 
     def add_public_holiday(self, date: str, name: str, type: str, state: str, year: int) -> int:
-        """Fügt einen neuen Feiertag/Ferientag hinzu."""
-        try:
-            cursor = self.execute(
-                """INSERT INTO public_holidays 
-                (date, name, type, state, year) 
-                VALUES (?, ?, ?, ?, ?)""",
-                (date, name, type, state, year)
-            )
-            return cursor.lastrowid
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen des Feiertags: {str(e)}")
+        """Fügt einen neuen Feiertag/Ferientag hinzu.
+        
+        DEPRECATED: Verwende self.holidays.add_public() stattdessen.
+        """
+        return self.holidays.add_public(date, name, type, state, year)
 
     def add_school_holiday(self, date: str, name: str, description: str = None) -> int:
-        """Fügt einen schulspezifischen freien Tag hinzu."""
-        try:
-            cursor = self.execute(
-                """INSERT INTO school_holidays 
-                (date, name, description)
-                VALUES (?, ?, ?)""",
-                (date, name, description)
-            )
-            return cursor.lastrowid
-        except Exception as e:
-            raise Exception(f"Fehler beim Hinzufügen des Schulfeiertags: {str(e)}")
+        """Fügt einen schulspezifischen freien Tag hinzu.
+        
+        DEPRECATED: Verwende self.holidays.add_school() stattdessen.
+        """
+        return self.holidays.add_school(date, name, description)
 
     def delete_public_holiday(self, holiday_id: int) -> None:
-        """Löscht einen Feiertag/Ferientag."""
-        try:
-            self.execute(
-                "DELETE FROM public_holidays WHERE id = ?",
-                (holiday_id,)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen des Feiertags: {str(e)}")
+        """Löscht einen Feiertag/Ferientag.
+        
+        DEPRECATED: Verwende self.holidays.delete_public() stattdessen.
+        """
+        self.holidays.delete_public(holiday_id)
 
     def delete_school_holiday(self, holiday_id: int) -> None:
-        """Löscht einen schulspezifischen freien Tag."""
-        try:
-            self.execute(
-                "DELETE FROM school_holidays WHERE id = ?",
-                (holiday_id,)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen des Schulfeiertags: {str(e)}")
+        """Löscht einen schulspezifischen freien Tag.
+        
+        DEPRECATED: Verwende self.holidays.delete_school() stattdessen.
+        """
+        self.holidays.delete_school(holiday_id)
 
     def get_holidays_by_date_range(self, start_date: str, end_date: str) -> list:
-        """Holt alle Feiertage und freien Tage in einem Zeitraum."""
-        try:
-            # Erst die öffentlichen Feiertage/Ferien
-            cursor = self.execute(
-                """SELECT date, name, type, 'public' as source
-                FROM public_holidays 
-                WHERE date BETWEEN ? AND ?""",
-                (start_date, end_date)
-            )
-            holidays = [dict(row) for row in cursor.fetchall()]
-            
-            # Dann die schulspezifischen
-            cursor = self.execute(
-                """SELECT date, name, 'school' as type, 'school' as source
-                FROM school_holidays 
-                WHERE date BETWEEN ? AND ?""",
-                (start_date, end_date)
-            )
-            holidays.extend([dict(row) for row in cursor.fetchall()])
-            
-            # Sortiert nach Datum zurückgeben
-            return sorted(holidays, key=lambda x: x['date'])
-        except Exception as e:
-            raise Exception(f"Fehler beim Laden der Feiertage: {str(e)}")
+        """Holt alle Feiertage und freien Tage in einem Zeitraum.
+        
+        DEPRECATED: Verwende self.holidays.get_by_date_range() stattdessen.
+        """
+        return self.holidays.get_by_date_range(start_date, end_date)
 
     def clear_public_holidays(self, year: int, state: str) -> None:
-        """Löscht alle öffentlichen Feiertage eines Jahres/Bundeslandes."""
-        try:
-            self.execute(
-                """DELETE FROM public_holidays 
-                WHERE year = ? AND state = ?""",
-                (year, state)
-            )
-        except Exception as e:
-            raise Exception(f"Fehler beim Löschen der Feiertage: {str(e)}")
+        """Löscht alle öffentlichen Feiertage eines Jahres/Bundeslandes.
+        
+        DEPRECATED: Verwende self.holidays.clear_public_by_year() stattdessen.
+        """
+        self.holidays.clear_public_by_year(year, state)
 
     def get_school_holidays(self) -> list:
-        """Holt alle schulspezifischen freien Tage."""
-        try:
-            cursor = self.execute(
-                """SELECT * FROM school_holidays 
-                ORDER BY date"""
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Laden der Schulfeiertage: {str(e)}")
+        """Holt alle schulspezifischen freien Tage.
+        
+        DEPRECATED: Verwende self.holidays.get_school_holidays() stattdessen.
+        """
+        return self.holidays.get_school_holidays()
 
     def get_public_holidays_by_year(self, year: int, state: str) -> list:
-        """Holt alle öffentlichen Feiertage/Ferien eines Jahres."""
-        try:
-            cursor = self.execute(
-                """SELECT * FROM public_holidays 
-                WHERE year = ? AND state = ?
-                ORDER BY date""",
-                (year, state)
-            )
-            return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            raise Exception(f"Fehler beim Laden der Feiertage: {str(e)}")
-
+        """Holt alle öffentlichen Feiertage/Ferien eines Jahres.
+        
+        DEPRECATED: Verwende self.holidays.get_public_by_year() stattdessen.
+        """
+        return self.holidays.get_public_by_year(year, state)
 
     def update_lesson_status_for_holidays(self):
-        """Aktualisiert den Status von Stunden, die in Ferien/an Feiertagen liegen."""
-        try:
-            # Hole alle Stunden
-            cursor = self.execute(
-                "SELECT id, date FROM lessons"
-            )
-            lessons = cursor.fetchall()
-            
-            for lesson in lessons:
-                # Prüfe ob das Datum ein Feiertag/Ferientag ist
-                cursor = self.execute(
-                    """SELECT type, name FROM public_holidays 
-                    WHERE date = ?""",
-                    (lesson['date'],)
-                )
-                holiday = cursor.fetchone()
-                
-                if holiday:
-                    status_note = f"Entfällt wegen {'Feiertag' if holiday['type'] == 'holiday' else 'Ferien'}: {holiday['name']}"
-                    # Update den Status
-                    self.execute(
-                        """UPDATE lessons 
-                        SET status = 'cancelled',
-                            status_note = ?
-                        WHERE id = ?""",
-                        (status_note, lesson['id'])
-                    )
-                    
-        except Exception as e:
-            raise Exception(f"Fehler beim Aktualisieren der Stunden-Status: {str(e)}")
+        """Aktualisiert den Status von Stunden, die in Ferien/an Feiertagen liegen.
+        
+        DEPRECATED: Verwende self.holidays.update_lesson_status_for_holidays() stattdessen.
+        """
+        self.holidays.update_lesson_status_for_holidays()
