@@ -143,6 +143,15 @@ class CourseDialog(QDialog):
             self.color = QColor(self.course.color)
             self.update_color_button()
 
+        # Lade template_id und setze im ComboBox
+        if self.course.template_id:
+            # Lade Templates für das aktuelle Fach
+            self.load_templates()
+            # Setze die template_id im ComboBox
+            idx = self.template.findData(self.course.template_id)
+            if idx >= 0:
+                self.template.setCurrentIndex(idx)
+
         # Aktiviere Bearbeiten-Button
         self.edit_types_btn.setEnabled(True)
 
@@ -275,39 +284,78 @@ class CourseDialog(QDialog):
             window = self.parent.parent
             data = self.get_data()
             course_id = None
+            template_id = data['template_id']
+            template_changed = False
             
             if self.course:
                 # Update
+                # Prüfe ob template_id sich geändert hat
+                old_template_id = self.course.template_id
+                template_changed = (old_template_id != template_id)
+                
                 self.course.name = data['name']
                 self.course.type = data['type']
                 self.course.subject = data['subject']
                 self.course.description = data['description']
                 self.course.color = data['color']
+                self.course.template_id = template_id
                 self.course.update(window.db)
                 course_id = self.course.id
+                
+                # Nur wenn template_id sich geändert hat
+                if template_changed:
+                    if template_id:
+                        # Neue template_id gesetzt: Lösche alte Typen und erstelle neue
+                        try:
+                            # Lösche alte Bewertungstypen wenn template_id geändert wurde
+                            existing_types = window.db.get_assessment_types(course_id)
+                            if existing_types:
+                                # Lösche alle bestehenden Typen
+                                for atype in existing_types:
+                                    window.db.delete_assessment_type(atype['id'])
+                            
+                            # Erstelle neue Bewertungstypen aus Template
+                            window.db.create_assessment_types_from_template(course_id, template_id)
+                            # Öffne direkt den Dialog zum Bearbeiten der Bewertungstypen
+                            if QMessageBox.question(
+                                self,
+                                "Bewertungstypen",
+                                "Möchten Sie jetzt die Bewertungstypen für diesen Kurs bearbeiten?",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                            ) == QMessageBox.StandardButton.Yes:
+                                from src.views.dialogs.grading_system_dialog import GradingSystemDialog
+                                edit_dialog = GradingSystemDialog(self, course_id=course_id)
+                                edit_dialog.exec()
+                        except ValueError as e:
+                            QMessageBox.information(self, "Hinweis", str(e))
+                    else:
+                        # template_id wurde entfernt (auf None gesetzt): Lösche alle Typen
+                        existing_types = window.db.get_assessment_types(course_id)
+                        if existing_types:
+                            for atype in existing_types:
+                                window.db.delete_assessment_type(atype['id'])
             else:
                 # Neu
                 course = Course.create(window.db, **data)
                 course_id = course.id
                 self.course = course
                 
-                # Nach Kurserstellung
-            template_id = self.template.currentData()
-            if template_id:
-                try:
-                    window.db.create_assessment_types_from_template(course_id, template_id)
-                    # Öffne direkt den Dialog zum Bearbeiten der Bewertungstypen
-                    if QMessageBox.question(
-                        self,
-                        "Bewertungstypen",
-                        "Möchten Sie jetzt die Bewertungstypen für diesen Kurs bearbeiten?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    ) == QMessageBox.StandardButton.Yes:
-                        from src.views.dialogs.grading_system_dialog import GradingSystemDialog
-                        edit_dialog = GradingSystemDialog(self, course_id=course_id)
-                        edit_dialog.exec()
-                except ValueError as e:
-                    QMessageBox.information(self, "Hinweis", str(e))
+                # Nach Kurserstellung: Nur wenn template_id gesetzt wurde
+                if template_id:
+                    try:
+                        # Course.create() hat bereits create_assessment_types_from_template aufgerufen
+                        # Frage nur ob der Benutzer die Typen bearbeiten möchte
+                        if QMessageBox.question(
+                            self,
+                            "Bewertungstypen",
+                            "Möchten Sie jetzt die Bewertungstypen für diesen Kurs bearbeiten?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        ) == QMessageBox.StandardButton.Yes:
+                            from src.views.dialogs.grading_system_dialog import GradingSystemDialog
+                            edit_dialog = GradingSystemDialog(self, course_id=course_id)
+                            edit_dialog.exec()
+                    except ValueError as e:
+                        QMessageBox.information(self, "Hinweis", str(e))
 
             # Button aktivieren
             self.edit_types_btn.setEnabled(True)

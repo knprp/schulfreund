@@ -29,7 +29,7 @@ class CompetencyDialog(QDialog):
         layout.addWidget(QLabel("Kompetenzbereich:"))
         self.area = QComboBox()
         self.area.addItems([
-            "Fachkompetenz",
+            "Sachkompetenz",
             "Methodenkompetenz",
             "Sozialkompetenz",
             "Selbstkompetenz"

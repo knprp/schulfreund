@@ -115,19 +115,28 @@ class GradingSystemRepository(BaseRepository):
     def get_by_course(self, course_id: int) -> Optional[Dict[str, Any]]:
         """Holt das Notensystem für einen Kurs über dessen Template.
         
+        Versucht zuerst über die template_id des Kurses, falls vorhanden.
+        Falls keine template_id vorhanden ist, wird None zurückgegeben.
+        
         Args:
             course_id: ID des Kurses
             
         Returns:
             Dictionary mit Notensystemdaten oder None
         """
+        # Versuche zuerst über die template_id des Kurses
         cursor = self.execute(
             """SELECT gs.* 
             FROM courses c
             JOIN assessment_type_templates att ON c.template_id = att.id
             JOIN grading_systems gs ON att.grading_system_id = gs.id
-            WHERE c.id = ?""",
+            WHERE c.id = ? AND c.template_id IS NOT NULL""",
             (course_id,)
         )
         row = cursor.fetchone()
-        return self._dict_from_row(row)
+        if row:
+            return self._dict_from_row(row)
+        
+        # Falls keine template_id vorhanden ist, gibt es kein Notensystem
+        # (assessment_types haben keine direkte Verbindung zu grading_systems)
+        return None
