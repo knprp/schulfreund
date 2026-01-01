@@ -53,7 +53,7 @@ class AnalysisWidget(QWidget):
         self.course_grades_table = QTableWidget()
         self.course_grades_table.setColumnCount(6)
         self.course_grades_table.setHorizontalHeaderLabels([
-            "Kurs", "Gesamt", "Fachkompetenz", "Methodenkompetenz",
+            "Kurs", "Gesamt", "Sachkompetenz", "Methodenkompetenz",
             "Sozialkompetenz", "Selbstkompetenz"
         ])
         
