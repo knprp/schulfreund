@@ -55,11 +55,9 @@ class CompetencyDialog(QDialog):
         try:
             self.subject.clear()
             
-            # Hole alle Fächer
-            cursor = self.main_window.db.execute(
-                "SELECT name FROM subjects ORDER BY name"
-            )
-            subjects = cursor.fetchall()
+            # Hole alle Fächer über Controller
+            subjects_data = self.main_window.controllers.subject.get_all_subjects()
+            subjects = [{'name': s['name']} for s in subjects_data]
             
             for subject in subjects:
                 self.subject.addItem(subject['name'])

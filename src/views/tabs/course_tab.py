@@ -101,7 +101,7 @@ class CourseTab(QWidget):
         
         self.detail_tabs.addTab(self.lesson_table, "Stunden")
 
-        self.lesson_table.setItemDelegate(StrikeoutDelegate(self.lesson_table, self.parent.db))
+        self.lesson_table.setItemDelegate(StrikeoutDelegate(self.lesson_table, self.parent.db, self.parent))
         
         # Tab für Noten
         self.grades_widget = QTableWidget()
@@ -145,26 +145,8 @@ class CourseTab(QWidget):
     def load_course_lessons(self, course_id: int):
         """Lädt die Stunden des ausgewählten Kurses"""
         try:
-            # Ergänze status und status_note in der SQL-Abfrage
-            cursor = self.parent.db.execute("""
-                SELECT DISTINCT 
-                    l.id,
-                    l.date,
-                    l.time,
-                    l.topic,
-                    l.duration,
-                    l.status,
-                    l.status_note,
-                    GROUP_CONCAT(c.area || ': ' || c.description) as competencies
-                FROM lessons l
-                LEFT JOIN lesson_competencies lc ON l.id = lc.lesson_id
-                LEFT JOIN competencies c ON lc.competency_id = c.id
-                WHERE l.course_id = ?
-                GROUP BY l.id
-                ORDER BY l.date DESC, l.time DESC
-            """, (course_id,))
-            
-            lessons = cursor.fetchall()
+            # Lade Stunden über Controller
+            lessons = self.parent.controllers.course.get_course_lessons(course_id)
             
             # Tabelle leeren und Größe anpassen
             self.lesson_table.setRowCount(0)
@@ -181,6 +163,7 @@ class CourseTab(QWidget):
             
             self.lesson_table.setRowCount(len(lessons))
             
+            # Stunden einfügen (lessons ist jetzt eine Liste von Dictionaries)
             for row, lesson in enumerate(lessons):
                 # Datum
                 date_item = QTableWidgetItem(lesson['date'])
@@ -302,29 +285,8 @@ class CourseTab(QWidget):
     def load_course_grades(self, course_id: int):
         """Lädt alle Bewertungen des ausgewählten Kurses"""
         try:
-            # Hole alle Bewertungen mit zugehörigen Details
-            cursor = self.parent.db.execute("""
-                SELECT 
-                    a.date,
-                    s.first_name || ' ' || s.last_name as student_name,
-                    GROUP_CONCAT(c.area || ': ' || c.description) as competencies,
-                    at.name as assessment_type,
-                    ROUND(AVG(a.grade), 2) as average_grade,
-                    a.topic,
-                    COUNT(DISTINCT s.id) as student_count,
-                    a.lesson_id
-                FROM assessments a
-                JOIN students s ON a.student_id = s.id
-                JOIN assessment_types at ON a.assessment_type_id = at.id
-                LEFT JOIN lessons l ON a.lesson_id = l.id
-                LEFT JOIN lesson_competencies lc ON l.id = lc.lesson_id
-                LEFT JOIN competencies c ON lc.competency_id = c.id
-                WHERE a.course_id = ?
-                GROUP BY a.date, a.topic, at.id
-                ORDER BY a.date DESC, at.name
-            """, (course_id,))
-            
-            grades = cursor.fetchall()
+            # Hole alle Bewertungen mit zugehörigen Details über Controller
+            grades = self.parent.controllers.course.get_course_grades_detailed(course_id)
             
             # Tabelle leeren und Größe anpassen
             self.grades_widget.setRowCount(0)
@@ -392,33 +354,9 @@ class CourseTab(QWidget):
             msg.setDefaultButton(QMessageBox.StandardButton.No)
             
             if msg.exec() == QMessageBox.StandardButton.Yes:
-                # Zuerst prüfen wie viele Noten betroffen sind
-                cursor = self.parent.db.execute("""
-                    SELECT COUNT(*) as count 
-                    FROM assessments 
-                    WHERE lesson_id = ?
-                """, (lesson_id,))
-                count = cursor.fetchone()['count']
-                print(f"DEBUG: {count} Noten gefunden zum Löschen")
-
-                # Alle Noten dieser Stunde löschen
-                cursor = self.parent.db.execute("""
-                    DELETE FROM assessments 
-                    WHERE lesson_id = ?
-                """, (lesson_id,))
-                print(f"DEBUG: {cursor.rowcount} Noten wurden gelöscht")
-                
-                # Commit um sicherzustellen dass die Änderungen gespeichert sind
-                self.parent.db.conn.commit()
-                
-                # Prüfe ob noch Noten existieren
-                cursor = self.parent.db.execute("""
-                    SELECT COUNT(*) as count 
-                    FROM assessments 
-                    WHERE lesson_id = ?
-                """, (lesson_id,))
-                remaining = cursor.fetchone()['count']
-                print(f"DEBUG: {remaining} Noten verbleiben")
+                # Lösche alle Noten dieser Stunde über Controller
+                deleted_count = self.parent.controllers.assessment.delete_assessments_by_lesson(lesson_id)
+                print(f"DEBUG: {deleted_count} Noten wurden gelöscht")
 
                 # Aktualisiere die Ansicht
                 selected_items = self.courses_table.selectedItems()
@@ -449,8 +387,18 @@ class CourseTab(QWidget):
 
     def edit_course(self, course_id):
         try:
-            course = Course.get_by_id(self.parent.db, course_id)
-            if course:
+            # Lade Kurs über Controller
+            course_data = self.parent.controllers.course.get_course(course_id)
+            if course_data:
+                # Konvertiere Dictionary in Course-Objekt für Kompatibilität
+                course = Course(
+                    id=course_data['id'],
+                    name=course_data['name'],
+                    type=course_data.get('type', 'course'),
+                    subject=course_data.get('subject'),
+                    description=course_data.get('description'),
+                    color=course_data.get('color')
+                )
                 dialog = CourseDialog(self, course)
                 if dialog.exec():
                     data = dialog.get_data()
@@ -467,17 +415,19 @@ class CourseTab(QWidget):
 
     def delete_course(self, course_id):
         try:
-            course = Course.get_by_id(self.parent.db, course_id)
-            if course:
+            # Lade Kurs über Controller, um Namen zu holen
+            course_data = self.parent.controllers.course.get_course(course_id)
+            if course_data:
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Icon.Question)
-                msg.setText(f"Möchten Sie den Kurs '{course.name}' wirklich löschen?")
+                msg.setText(f"Möchten Sie den Kurs '{course_data['name']}' wirklich löschen?")
                 msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 
                 if msg.exec() == QMessageBox.StandardButton.Yes:
-                    course.delete(self.parent.db)
+                    # Lösche Kurs über Controller
+                    self.parent.controllers.course.delete_course(course_id)
                     self.refresh_courses()
-                    self.parent.statusBar().showMessage(f"Kurs {course.name} wurde gelöscht", 3000)
+                    self.parent.statusBar().showMessage(f"Kurs {course_data['name']} wurde gelöscht", 3000)
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
@@ -505,7 +455,21 @@ class CourseTab(QWidget):
     def refresh_courses(self):
         try:
             self.courses_table.setRowCount(0)
-            courses = Course.get_all(self.parent.db)
+            # Lade Kurse über Controller
+            courses_data = self.parent.controllers.course.get_all_courses()
+            # Konvertiere Dictionaries in Course-Objekte für Kompatibilität
+            from src.models.course import Course
+            courses = []
+            for course_data in courses_data:
+                course = Course(
+                    id=course_data['id'],
+                    name=course_data['name'],
+                    type=course_data.get('type', 'course'),
+                    subject=course_data.get('subject'),
+                    description=course_data.get('description'),
+                    color=course_data.get('color')
+                )
+                courses.append(course)
             for course in courses:
                 row = self.courses_table.rowCount()
                 self.courses_table.insertRow(row)

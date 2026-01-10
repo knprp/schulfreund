@@ -75,7 +75,7 @@ class AssessmentTemplatesSettings(QWidget):
         
         try:
             # Hole alle Vorlagen
-            templates = self.parent.db.get_all_assessment_templates()
+            templates = self.parent.controllers.assessment_template.get_all_templates()
             
             for template in templates:
                 # Erstelle Template-Item
@@ -89,7 +89,7 @@ class AssessmentTemplatesSettings(QWidget):
                                     {'id': template['id'], 'type': 'template'})
                 
                 # Hole und füge Bewertungstypen hinzu
-                items = self.parent.db.get_template_items(template['id'])
+                items = self.parent.controllers.assessment_template.get_template_items(template['id'])
                 self._add_template_items(template_item, items)
                 
                 self.tree.addTopLevelItem(template_item)
@@ -129,7 +129,10 @@ class AssessmentTemplatesSettings(QWidget):
         if dialog.exec():
             try:
                 data = dialog.get_data()
-                self.parent.db.add_assessment_template(**data)
+                self.parent.controllers.assessment_template.add_template(
+                    data['name'], data['subject'], data['grading_system_id'], 
+                    data.get('description')
+                )
                 self.load_templates()
             except Exception as e:
                 QMessageBox.critical(self, "Fehler",
@@ -147,12 +150,15 @@ class AssessmentTemplatesSettings(QWidget):
         if item_data['type'] == 'template':
             # Vorlage bearbeiten
             try:
-                template = self.parent.db.get_assessment_template(item_data['id'])
+                template = self.parent.controllers.assessment_template.get_template(item_data['id'])
                 if template:
                     dialog = AssessmentTemplateDialog(self.parent, template)
                     if dialog.exec():
                         data = dialog.get_data()
-                        self.parent.db.update_assessment_template(item_data['id'], **data)
+                        self.parent.controllers.assessment_template.update_template(
+                            item_data['id'], data['name'], data['subject'], 
+                            data['grading_system_id'], data.get('description')
+                        )
                         self.load_templates()
             except Exception as e:
                 QMessageBox.critical(self, "Fehler",
@@ -181,7 +187,10 @@ class AssessmentTemplatesSettings(QWidget):
             dialog = AssessmentTypeDialog(self.parent, template_id, parent_id)
             if dialog.exec():
                 data = dialog.get_data()
-                self.parent.db.add_template_item(template_id, **data)
+                self.parent.controllers.assessment_template.add_template_item(
+                    template_id, data['name'], data.get('parent_item_id'),
+                    data.get('default_weight', 1.0)
+                )
                 self.load_templates()
         except Exception as e:
             QMessageBox.critical(self, "Fehler",
@@ -209,9 +218,9 @@ class AssessmentTemplatesSettings(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 if item_data['type'] == 'template':
-                    self.parent.db.delete_assessment_template(item_data['id'])
+                    self.parent.controllers.assessment_template.delete_template(item_data['id'])
                 else:
-                    self.parent.db.delete_template_item(item_data['id']) 
+                    self.parent.controllers.assessment_template.delete_template_item(item_data['id']) 
                 self.load_templates()
             except Exception as e:
                 QMessageBox.critical(self, "Fehler",

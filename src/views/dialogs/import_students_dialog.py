@@ -68,7 +68,7 @@ class ImportStudentsDialog(QDialog):
         """Lädt die Halbjahres-/Kurs-/Schülerstruktur"""
         try:
             # Hole alle Halbjahre
-            semesters = self.parent.db.get_semester_history()
+            semesters = self.parent.controllers.semester.get_semester_history()
             print(f"Gefundene Halbjahre: {semesters}")  # DEBUG
             
             for semester in semesters:
@@ -78,7 +78,7 @@ class ImportStudentsDialog(QDialog):
                 semester_item.setData('semester', Qt.ItemDataRole.UserRole + 1)
                 
                 # Hole Kurse für dieses Halbjahr
-                courses = self.parent.db.get_courses_by_semester(semester['id'])
+                courses = self.parent.controllers.course.get_courses_by_semester(semester['id'])
                 print(f"Gefundene Kurse für {semester_name}: {courses}")  # DEBUG
                 
                 for course in courses:
@@ -88,7 +88,7 @@ class ImportStudentsDialog(QDialog):
                     course_item.setData('course', Qt.ItemDataRole.UserRole + 1)
                     
                     # Hole Schüler für diesen Kurs
-                    students = self.parent.db.get_students_by_course(course['id'], semester['id'])
+                    students = self.parent.controllers.course.get_students_by_course(course['id'], semester['id'])
                     print(f"Gefundene Schüler für {course_name}: {students}")  # DEBUG
                     
                     for student in students:

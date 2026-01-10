@@ -85,9 +85,9 @@ class AnalysisWidget(QWidget):
             self.course_grades_table.setRowCount(0)
             self.radar_chart.removeAllSeries()
 
-            # Get data
-            course_grades = self.main_window.db.get_student_course_grades(student_id)
-            course_competencies = self.main_window.db.get_student_competency_grades(student_id)
+            # Get data via controller
+            course_grades = self.main_window.controllers.student.get_student_course_grades(student_id)
+            course_competencies = self.main_window.controllers.student.get_student_competency_grades(student_id)
 
             # Only update if there's data
             if course_grades and any(grade.get('final_grade') is not None for grade in course_grades.values()):
@@ -143,7 +143,7 @@ class AnalysisWidget(QWidget):
 
         # Assessment Types laden und anzeigen
         for course_id in course_grades.keys():
-            type_grades = self.main_window.db.get_student_assessment_type_grades(
+            type_grades = self.main_window.controllers.student.get_student_assessment_type_grades(
                 self.current_student_id, course_id
             )
             self.update_type_grades_table(type_grades)
@@ -153,7 +153,7 @@ class AnalysisWidget(QWidget):
         has_grades = False
         for course_id, course_data in course_grades.items():
             if course_data.get('final_grade') is not None:
-                type_grades = self.main_window.db.get_student_assessment_type_grades(
+                type_grades = self.main_window.controllers.student.get_student_assessment_type_grades(
                     self.current_student_id, course_id
                 )
                 if type_grades:

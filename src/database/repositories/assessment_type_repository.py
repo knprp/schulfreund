@@ -60,6 +60,23 @@ class AssessmentTypeRepository(BaseRepository):
         )
         return self._dicts_from_rows(cursor.fetchall())
     
+    def update(self, type_id: int, name: str,
+               parent_type_id: int = None, weight: float = 1.0) -> None:
+        """Aktualisiert einen Bewertungstyp.
+        
+        Args:
+            type_id: ID des Bewertungstyps
+            name: Neuer Name
+            parent_type_id: Optional, neue Parent-ID
+            weight: Neue Gewichtung
+        """
+        self.execute(
+            """UPDATE assessment_types 
+            SET name = ?, parent_type_id = ?, weight = ?
+            WHERE id = ?""",
+            (name, parent_type_id, weight, type_id)
+        )
+    
     def delete(self, type_id: int) -> None:
         """Löscht einen Bewertungstyp und alle zugehörigen Untertypen.
         

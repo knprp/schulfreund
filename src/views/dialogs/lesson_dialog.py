@@ -188,7 +188,7 @@ class LessonDialog(QDialog):
             list: Liste von Konflikten, jeder Konflikt als Dict mit Zeitslot und existierender Stunde
         """
         date_str = date.toString("yyyy-MM-dd")
-        existing_lessons = self.parent.db.get_lessons_by_date(date_str)
+        existing_lessons = self.parent.controllers.lesson.get_lessons_by_date(date_str)
         
         conflicts = []
         for slot in slots:
@@ -208,7 +208,7 @@ class LessonDialog(QDialog):
     def load_courses(self):
         """Lädt alle verfügbaren Kurse/Klassen"""
         try:
-            courses = self.parent.db.get_all_courses()
+            courses = self.parent.controllers.course.get_all_courses()
             self.course.clear()
             self.course.addItem("Bitte wählen...", None)  # Standardauswahl
             for course in courses:
@@ -304,7 +304,7 @@ class LessonDialog(QDialog):
     def mark_occupied_slots(self):
         """Markiert bereits belegte Zeitslots"""
         date_str = self.calendar.selectedDate().toString("yyyy-MM-dd")
-        existing_lessons = self.parent.db.get_lessons_by_date(date_str)
+        existing_lessons = self.parent.controllers.lesson.get_lessons_by_date(date_str)
         
         # Alle Slots zurücksetzen
         for row in range(self.lessons_table.rowCount()):

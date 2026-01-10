@@ -50,8 +50,8 @@ class ListManager:
             current_time = current_datetime.time()
             is_today = date == QDate.currentDate()
             
-            # Hole Stunden und Zeitslots
-            lessons = self.parent.db.get_lessons_by_date(date.toString("yyyy-MM-dd"))
+            # Hole Stunden und Zeitslots über Controller
+            lessons = self.parent.controllers.lesson.get_lessons_by_date(date.toString("yyyy-MM-dd"))
             time_slots = self.get_time_slots()
             day_schedule = self.calendar_container.day_schedule
             day_schedule.clear_schedule()
@@ -114,7 +114,7 @@ class ListManager:
                         else:
                             status = "kommend"
                             # Hole Hausaufgaben der vorherigen Stunde
-                            homework = self.parent.db.get_previous_lesson_homework(
+                            homework = self.parent.controllers.lesson.get_previous_homework(
                                 lesson['course_id'],
                                 lesson['date'],
                                 lesson['time']
@@ -133,7 +133,7 @@ class ListManager:
                         )
             
             # Hole und zeige die nächsten Stunden pro Kurs
-            next_lessons = self.parent.db.get_next_lesson_by_course(date.toString("yyyy-MM-dd"))
+            next_lessons = self.parent.controllers.lesson.get_next_lesson_by_course(date.toString("yyyy-MM-dd"))
             
             if next_lessons:
                 day_schedule.add_separator("Nächste Stunden pro Kurs")
@@ -143,7 +143,7 @@ class ListManager:
                     date_str = lesson_date.toString("dd.MM.")
                     
                     # Hole Hausaufgaben der vorherigen Stunde für diesen Kurs
-                    homework = self.parent.db.get_previous_lesson_homework(
+                    homework = self.parent.controllers.lesson.get_previous_homework(
                         lesson['course_id'],
                         lesson['date'],
                         lesson['time']
@@ -186,7 +186,7 @@ class ListManager:
                 
                 # Erstelle jede ausgewählte Stunde
                 for lesson_data in lessons_data:
-                    self.parent.db.add_lesson(lesson_data)
+                    self.parent.controllers.lesson.add_lesson(lesson_data)
                 
                 self.update_day_list(selected_date)
                 
@@ -224,7 +224,7 @@ class ListManager:
             if dialog.exec():
                 lessons_data = dialog.get_data()
                 for lesson_data in lessons_data:
-                    self.parent.db.add_lesson(lesson_data)
+                    self.parent.controllers.lesson.add_lesson(lesson_data)
                 
                 # Aktualisiere Kalenderansichten
                 self.update_all(date)
@@ -243,7 +243,7 @@ class ListManager:
     def edit_lesson(self, lesson_id):
         """Bearbeitet existierende Unterrichtsstunde(n)"""
         try:
-            lesson = self.parent.db.get_lesson(lesson_id)
+            lesson = self.parent.controllers.lesson.get_lesson(lesson_id)
             if lesson:
                 from src.views.dialogs.lesson_dialog import LessonDialog
                 dialog = LessonDialog(
@@ -259,7 +259,7 @@ class ListManager:
                     update_all_following = update_data.pop('update_all_following', False)
                     
                     # Aktualisiere die Stunde(n)
-                    self.parent.db.update_lesson(
+                    self.parent.controllers.lesson.update_lesson(
                         lesson_id, 
                         update_data, 
                         update_all_following
@@ -313,7 +313,7 @@ class ListManager:
     def delete_lesson(self, lesson_id):
         """Löscht eine oder mehrere Unterrichtsstunden"""
         try:
-            lesson = self.parent.db.get_lesson(lesson_id)
+            lesson = self.parent.controllers.lesson.get_lesson(lesson_id)
             if not lesson:
                 return
                 
@@ -322,7 +322,7 @@ class ListManager:
             
             if dialog.exec():
                 delete_all = dialog.get_delete_all()
-                self.parent.db.delete_lessons(lesson_id, delete_all)
+                self.parent.controllers.lesson.delete_lessons(lesson_id, delete_all)
                 self.update_day_list(self.calendar_container.get_selected_date())
                 
                 msg = "Alle folgenden Stunden wurden gelöscht" if delete_all else "Stunde wurde gelöscht"
@@ -333,7 +333,7 @@ class ListManager:
 
     def get_time_slots(self):
         """Berechnet die Zeitslots für den Tag basierend auf den Einstellungen."""
-        settings = self.parent.db.get_time_settings()
+        settings = self.parent.controllers.settings.get_time_settings()
         if not settings:
             # Standard-Einstellungen wenn nichts konfiguriert
             return [(QTime(8, 0), QTime(8, 45), 1)]

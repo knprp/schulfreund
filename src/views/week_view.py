@@ -208,7 +208,7 @@ class WeekView(QWidget):
         current_date = week_start
         for day in range(5):  # Mo-Fr
             date_str = current_date.toString("yyyy-MM-dd")
-            lessons = self.parent.db.get_lessons_by_date(date_str)
+            lessons = self.parent.controllers.lesson.get_lessons_by_date(date_str)
             
             # Prüfe ob der Tag ein Feiertag/Ferientag ist
             is_holiday = date_str in holiday_dict

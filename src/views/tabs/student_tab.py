@@ -128,18 +128,12 @@ class StudentTab(QWidget):
             self.course_filter.clear()
             self.course_filter.addItem("Alle Kurse", None)
             
-            semester = self.main_window.db.get_semester_dates()
+            semester = self.main_window.controllers.semester.get_semester_dates()
             if semester:
-                cursor = self.main_window.db.execute(
-                    """SELECT DISTINCT c.id, c.name 
-                    FROM courses c
-                    JOIN student_courses sc ON c.id = sc.course_id
-                    JOIN semester_history sh ON sc.semester_id = sh.id
-                    WHERE sh.start_date = ? AND sh.end_date = ?
-                    ORDER BY c.name""",
-                    (semester['semester_start'], semester['semester_end'])
+                courses = self.main_window.controllers.course.get_courses_for_semester_dates(
+                    semester['semester_start'], semester['semester_end']
                 )
-                for course in cursor.fetchall():
+                for course in courses:
                     self.course_filter.addItem(course['name'], course['id'])
 
             # Versuche die vorherige Auswahl wiederherzustellen
@@ -169,8 +163,7 @@ class StudentTab(QWidget):
         try:
             dialog = StudentDialog(
                 parent=self.main_window,
-                student=None,
-                db=self.main_window.db
+                student=None
             )
             
             while True:
@@ -207,25 +200,21 @@ class StudentTab(QWidget):
                 selected[0].row(), 0
             ).data(Qt.ItemDataRole.UserRole)
             
-            # Row-Objekt aus der Datenbank holen
-            row = self.main_window.db.execute(
-                "SELECT * FROM students WHERE id = ?",
-                (student_id,)
-            ).fetchone()
+            # Schüler aus Controller holen
+            student_data = self.main_window.controllers.student.get_student(student_id)
             
-            if row:
-                # Row in Student-Objekt konvertieren
+            if student_data:
+                # Dictionary in Student-Objekt konvertieren
                 from src.models.student import Student
                 student = Student(
-                    id=row['id'],
-                    first_name=row['first_name'],
-                    last_name=row['last_name']
+                    id=student_data['id'],
+                    first_name=student_data['first_name'],
+                    last_name=student_data['last_name']
                 )
                 
                 dialog = StudentDialog(
                     parent=self.main_window,
-                    student=student,
-                    db=self.main_window.db
+                    student=student
                 )
                 
                 if dialog.exec():
@@ -262,10 +251,7 @@ class StudentTab(QWidget):
             )
             
             if reply == QMessageBox.StandardButton.Yes:
-                self.main_window.db.execute(
-                    "DELETE FROM students WHERE id = ?",
-                    (student_id,)
-                )
+                self.main_window.controllers.student.delete_student(student_id)
                 self.refresh_students()
                 
         except Exception as e:
@@ -277,46 +263,53 @@ class StudentTab(QWidget):
 
     def create_student(self, data: dict) -> int:
         """Erstellt einen neuen Schüler"""
-        student = Student.create(
-            self.main_window.db,
+        student_id = self.main_window.controllers.student.create_student(
             first_name=data['first_name'],
             last_name=data['last_name']
         )
 
         # Kurse zuweisen
+        semester_id = self.get_current_semester_id()
         for course_id in data.get('course_ids', []):
-            student.add_course(self.main_window.db, course_id, self.get_current_semester_id())
+            self.main_window.controllers.student.add_student_to_course(
+                student_id, course_id, semester_id
+            )
             
-        return student.id
+        return student_id
 
     def update_student(self, student_id: int, data: dict) -> None:
-        student = Student.get_by_id(self.main_window.db, student_id)
-        if not student:
-            raise ValueError("Student nicht gefunden")
-            
-        student.first_name = data['first_name']
-        student.last_name = data['last_name']
-        student.update(self.main_window.db)
+        self.main_window.controllers.student.update_student(
+            student_id,
+            first_name=data['first_name'],
+            last_name=data['last_name']
+        )
 
+        # Kurse zuweisen (TODO: bestehende Kurse entfernen und neu zuweisen)
+        semester_id = self.get_current_semester_id()
         for course_id in data.get('course_ids', []):
-            student.add_course(self.main_window.db, course_id, self.get_current_semester_id())
+            self.main_window.controllers.student.add_student_to_course(
+                student_id, course_id, semester_id
+            )
 
     def refresh_students(self):
         """Aktualisiert die Schülerliste"""
         try:
             course_id = self.course_filter.currentData()
-            semester = self.main_window.db.get_semester_dates()
+            semester = self.main_window.controllers.semester.get_semester_dates()
 
-            # Alle Schüler laden
-            students = Student.get_all(self.main_window.db)
+            # Alle Schüler mit Kursen laden
+            if semester:
+                students = self.main_window.controllers.student.get_students_with_courses(
+                    semester.get('semester_start'), semester.get('semester_end')
+                )
+            else:
+                students = self.main_window.controllers.student.get_students_with_courses()
                 
             # Nach Kurs filtern wenn nötig
-            if course_id and semester:
-                # Nur Schüler anzeigen die im ausgewählten Kurs sind
+            if course_id:
                 filtered_students = []
                 for student in students:
-                    courses = student.get_current_courses(self.main_window.db)
-                    if any(c['id'] == course_id for c in courses):
+                    if any(c['id'] == course_id for c in student.get('courses', [])):
                         filtered_students.append(student)
                 students = filtered_students
 
@@ -326,21 +319,21 @@ class StudentTab(QWidget):
                 # Name
                 self.students_table.setItem(
                     row, 0, 
-                    QTableWidgetItem(student.last_name)
+                    QTableWidgetItem(student['last_name'])
                 )
                 self.students_table.setItem(
                     row, 1, 
-                    QTableWidgetItem(student.first_name)
+                    QTableWidgetItem(student['first_name'])
                 )
                 
                 # ID als userData speichern
                 self.students_table.item(row, 0).setData(
                     Qt.ItemDataRole.UserRole, 
-                    student.id
+                    student['id']
                 )
                 
-                # Kurse laden und anzeigen
-                courses = student.get_current_courses(self.main_window.db)
+                # Kurse anzeigen
+                courses = student.get('courses', [])
                 course_names = [course['name'] for course in courses]
                 self.students_table.setItem(
                     row, 2,
@@ -380,15 +373,15 @@ class StudentTab(QWidget):
     def load_student_details(self, student_id: int):
         """Lädt alle Details für einen Schüler"""
         try:
-            student = Student.get_by_id(self.main_window.db, student_id)
-            if not student:
+            student_data = self.main_window.controllers.student.get_student(student_id)
+            if not student_data:
                 raise ValueError("Student nicht gefunden")
             
             # Hole aktuelle Kurse
-            courses = student.get_current_courses(self.main_window.db)
+            courses = self.main_window.controllers.student.get_student_courses(student_id)
             
             # Aktualisiere Header
-            header_text = student.get_full_name()
+            header_text = f"{student_data['first_name']} {student_data['last_name']}"
             if courses:
                 course_names = [course['name'] for course in courses]
                 header_text += f" ({', '.join(course_names)})"
@@ -412,11 +405,11 @@ class StudentTab(QWidget):
 
     def get_current_semester_id(self) -> int:
         """Hilfsmethode um das aktuelle Semester zu bekommen"""
-        semester = self.main_window.db.get_semester_dates()
+        semester = self.main_window.controllers.semester.get_semester_dates()
         if not semester:
             raise ValueError("Kein aktives Semester gefunden")
 
-        semester_data = self.main_window.db.get_semester_by_date(semester['semester_start'])
+        semester_data = self.main_window.controllers.semester.get_semester_by_date(semester['semester_start'])
         if not semester_data:
             raise ValueError("Aktives Semester nicht gefunden")
             

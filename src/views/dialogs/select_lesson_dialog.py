@@ -70,8 +70,10 @@ class SelectLessonDialog(QDialog):
                 return
             
             # Hole alle Stunden des Kurses
-            # Verwende die alte API für Rückwärtskompatibilität
-            all_lessons = self.parent.db.get_all_lessons()
+            # Hole alle Stunden des Kurses über Controller
+            # TODO: Methode get_lessons_by_course im LessonController hinzufügen
+            # Für jetzt: Hole alle und filtere nach course_id
+            all_lessons = self.parent.controllers.lesson.get_all_lessons()
             course_lessons = [l for l in all_lessons if l.get('course_id') == self.course_id]
             
             # Sortiere nach Datum und Zeit

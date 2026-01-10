@@ -65,11 +65,8 @@ class TimetableSettings(QWidget):
     def load_settings(self):
         """Lädt die aktuellen Einstellungen aus der Datenbank"""
         try:
-            # Hole Grundeinstellungen
-            cursor = self.parent.db.execute(
-                "SELECT first_lesson_start, lesson_duration FROM timetable_settings WHERE id = 1"
-            )
-            settings = cursor.fetchone()
+            # Hole Grundeinstellungen über Controller
+            settings = self.parent.controllers.settings.get_time_settings()
             
             if settings:
                 # Setze Startzeit
@@ -79,11 +76,8 @@ class TimetableSettings(QWidget):
                 # Setze Stundenlänge
                 self.lesson_duration.setValue(settings['lesson_duration'])
             
-            # Hole Pausen
-            cursor = self.parent.db.execute(
-                "SELECT after_lesson, duration FROM breaks ORDER BY after_lesson"
-            )
-            breaks = cursor.fetchall()
+            # Hole Pausen über Controller
+            breaks = self.parent.controllers.settings.get_breaks()
             
             # Setze Pausenwerte
             for row, break_info in enumerate(breaks):
@@ -99,29 +93,27 @@ class TimetableSettings(QWidget):
     def save_settings(self):
         """Speichert die Einstellungen in der Datenbank"""
         try:
-            # Speichere Grundeinstellungen
-            self.parent.db.execute(
-                """INSERT OR REPLACE INTO timetable_settings 
-                   (id, first_lesson_start, lesson_duration) 
-                   VALUES (1, ?, ?)""",
-                (self.first_lesson_time.time().toString("HH:mm"),
-                 self.lesson_duration.value())
+            # Speichere Grundeinstellungen über Controller
+            self.parent.controllers.settings.update_time_settings(
+                self.first_lesson_time.time().toString("HH:mm"),
+                self.lesson_duration.value()
             )
             
-            # Lösche alte Pausen
-            self.parent.db.execute("DELETE FROM breaks")
-            
-            # Speichere neue Pausen
+            # Sammle Pausen-Daten
+            breaks_data = []
             for row in range(10):
                 lesson_spin = self.breaks_table.cellWidget(row, 0)
                 duration_spin = self.breaks_table.cellWidget(row, 1)
                 
                 # Nur Pausen mit Dauer > 0 speichern
                 if duration_spin.value() > 0:
-                    self.parent.db.execute(
-                        "INSERT INTO breaks (after_lesson, duration) VALUES (?, ?)",
-                        (lesson_spin.value(), duration_spin.value())
-                    )
+                    breaks_data.append({
+                        'after_lesson': lesson_spin.value(),
+                        'duration': duration_spin.value()
+                    })
+            
+            # Speichere neue Pausen über Controller
+            self.parent.controllers.settings.update_breaks(breaks_data)
             
             QMessageBox.information(self, "Erfolg", "Einstellungen wurden gespeichert")
             

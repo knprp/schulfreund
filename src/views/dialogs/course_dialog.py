@@ -19,7 +19,8 @@ class CourseDialog(QDialog):
         super().__init__(parent)
         self.parent = parent
         self.course = course
-        self.db = parent.parent.db
+        # Zugriff über parent (parent ist Tab, parent.parent ist MainWindow)
+        self.main_window = parent.parent
         self.selected_student_ids = []
         self.color = QColor('#FFFFFF')
         
@@ -162,17 +163,17 @@ class CourseDialog(QDialog):
         """Lädt die aktuellen Schüler des Kurses in die Liste"""
         try:
             # Hole aktuelles Semester
-            semester = self.db.get_semester_dates()
+            semester = self.main_window.controllers.semester.get_semester_dates()
             if not semester:
                 return
                 
             # Hole semester_id aus der Historie
-            current_semester = self.db.get_semester_by_date(semester['semester_start'])
+            current_semester = self.main_window.controllers.semester.get_semester_by_date(semester['semester_start'])
             if not current_semester:
                 return
                 
-            # Hole Schüler
-            students = self.db.get_students_by_course(self.course.id, current_semester['id'])
+            # Hole Schüler über Controller
+            students = self.main_window.controllers.course.get_students_by_course(self.course.id, current_semester['id'])
             
             # Aktualisiere Liste
             self.student_list.clear()
@@ -197,7 +198,7 @@ class CourseDialog(QDialog):
             
             subject = self.subject.currentText()
             if subject:
-                templates = self.db.get_templates_by_subject(subject)
+                templates = self.main_window.controllers.assessment_template.get_templates_by_subject(subject)
                 for template in templates:
                     self.template.addItem(template['name'], template['id'])
                     
@@ -252,7 +253,19 @@ class CourseDialog(QDialog):
         try:
             self.student_list.clear()
             for student_id in self.selected_student_ids:
-                student = Student.get_by_id(self.db, student_id)
+                if self.main_window:
+                    student_data = self.main_window.controllers.student.get_student_details(student_id)
+                    if student_data:
+                        from src.models.student import Student
+                        student = Student(
+                            id=student_data['id'],
+                            first_name=student_data['first_name'],
+                            last_name=student_data['last_name']
+                        )
+                    else:
+                        student = None
+                else:
+                    student = Student.get_by_id(self.db, student_id)
                 if student:
                     item = QListWidgetItem(f"{student.last_name}, {student.first_name}")
                     item.setData(Qt.ItemDataRole.UserRole, student_id)
@@ -308,14 +321,14 @@ class CourseDialog(QDialog):
                         # Neue template_id gesetzt: Lösche alte Typen und erstelle neue
                         try:
                             # Lösche alte Bewertungstypen wenn template_id geändert wurde
-                            existing_types = window.db.get_assessment_types(course_id)
+                            existing_types = window.controllers.assessment.get_assessment_types_for_course(course_id)
                             if existing_types:
                                 # Lösche alle bestehenden Typen
                                 for atype in existing_types:
-                                    window.db.delete_assessment_type(atype['id'])
+                                    window.controllers.assessment.delete_assessment_type(atype['id'])
                             
                             # Erstelle neue Bewertungstypen aus Template
-                            window.db.create_assessment_types_from_template(course_id, template_id)
+                            window.controllers.assessment.create_assessment_types_from_template(course_id, template_id)
                             # Öffne direkt den Dialog zum Bearbeiten der Bewertungstypen
                             if QMessageBox.question(
                                 self,
@@ -330,20 +343,35 @@ class CourseDialog(QDialog):
                             QMessageBox.information(self, "Hinweis", str(e))
                     else:
                         # template_id wurde entfernt (auf None gesetzt): Lösche alle Typen
-                        existing_types = window.db.get_assessment_types(course_id)
+                        existing_types = window.controllers.assessment.get_assessment_types_for_course(course_id)
                         if existing_types:
                             for atype in existing_types:
-                                window.db.delete_assessment_type(atype['id'])
+                                window.controllers.assessment.delete_assessment_type(atype['id'])
             else:
-                # Neu
-                course = Course.create(window.db, **data)
-                course_id = course.id
-                self.course = course
+                # Neu - über Controller erstellen
+                course_id = window.controllers.course.create_course(
+                    data['name'], data['type'], data.get('subject'),
+                    data.get('description'), data.get('color'), template_id
+                )
+                
+                # Hole Kurs-Daten für self.course
+                course_data = window.controllers.course.get_course_by_id(course_id)
+                if course_data:
+                    from src.models.course import Course
+                    self.course = Course(
+                        id=course_data['id'],
+                        name=course_data['name'],
+                        type=course_data['type'],
+                        subject=course_data.get('subject'),
+                        description=course_data.get('description'),
+                        color=course_data.get('color'),
+                        template_id=course_data.get('template_id')
+                    )
                 
                 # Nach Kurserstellung: Nur wenn template_id gesetzt wurde
                 if template_id:
                     try:
-                        # Course.create() hat bereits create_assessment_types_from_template aufgerufen
+                        # Controller hat bereits create_assessment_types_from_template aufgerufen
                         # Frage nur ob der Benutzer die Typen bearbeiten möchte
                         if QMessageBox.question(
                             self,
@@ -361,17 +389,16 @@ class CourseDialog(QDialog):
             self.edit_types_btn.setEnabled(True)
 
             # Schüler verarbeiten
-            semester_dates = window.db.get_semester_dates()
+            semester_dates = window.controllers.semester.get_semester_dates()
             if self.selected_student_ids and semester_dates:
-                current_semester = window.db.get_semester_by_date(
+                current_semester = window.controllers.semester.get_semester_by_date(
                     semester_dates['semester_start'])
                     
                 if current_semester:
                     for student_id in self.selected_student_ids:
-                        student = Student.get_by_id(window.db, student_id)
-                        if student:
-                            student.add_course(window.db, course_id, 
-                                            current_semester['id'])
+                        window.controllers.student.add_student_to_course(
+                            student_id, course_id, current_semester['id']
+                        )
 
             # Aktualisiere die UI des Hauptfensters
             if hasattr(self.parent, 'refresh_courses'):
@@ -405,13 +432,10 @@ class CourseDialog(QDialog):
             self.subject.clear()
             self.subject.addItem("", None)  # Leere Auswahl
             
-            # Hole alle Fächer
-            cursor = self.db.execute(
-                "SELECT name FROM subjects ORDER BY name"
-            )
-            subjects = cursor.fetchall()
+            # Hole alle Fächer über Controller
+            subjects_data = self.main_window.controllers.subject.get_all_subjects()
             
-            for subject in subjects:
+            for subject in subjects_data:
                 self.subject.addItem(subject['name'])
                 
         except Exception as e:
