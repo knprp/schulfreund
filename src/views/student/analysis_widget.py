@@ -224,13 +224,23 @@ class AnalysisWidget(QWidget):
 
         # Achsen einrichten
         angular_axis = QCategoryAxis()
-        radial_axis = QValueAxis()
+        radial_axis = QCategoryAxis()
         
-        radial_axis.setRange(1, 6)
-        radial_axis.setReverse(True)
+        # Radiale Achse mit umgekehrter Skala (1 außen, 6 innen)
+        # Wir verwenden CategoryAxis und setzen Labels manuell
+        # Die Positionswerte müssen invertiert werden: 1 -> Position 8 (ganz außen), 6 -> Position 1 (innen, nah zur Mitte)
+        # Bereich erweitern auf 0-8, damit die 1 ganz außen positioniert werden kann
+        radial_axis.setRange(0, 8)
+        # Labels für die umgekehrte Skala setzen, 1 ganz außen, 6 nah zur Mitte für stärkere Betonung
+        # Die Position ist der Wert auf der Achse (8 = ganz außen, 1 = innen, nah zur Mitte)
+        radial_axis.append("1", 8.0)  # Label "1" bei Position 8.0 (ganz außen)
+        radial_axis.append("2", 6.5)
+        radial_axis.append("3", 5.0)
+        radial_axis.append("4", 4.0)
+        radial_axis.append("5", 3.0)
+        radial_axis.append("6", 1.0)  # Label "6" bei Position 1.0 (innen, nah zur Mitte - auffällig!)
         radial_axis.setTitleText("Note")
-        radial_axis.setLabelFormat("%.1f")
-        radial_axis.setMinorTickCount(1)
+        radial_axis.setMinorTickCount(0)
         radial_axis.setGridLineVisible(True)
         radial_axis.setMinorGridLineVisible(True)
 
@@ -245,6 +255,9 @@ class AnalysisWidget(QWidget):
 
         angular_axis.setGridLineVisible(True)
         angular_axis.setGridLinePen(grid_pen)
+        
+        # Labels außerhalb positionieren für bessere Lesbarkeit
+        angular_axis.setLabelsPosition(QCategoryAxis.AxisLabelsPosition.AxisLabelsPositionOnValue)
 
         # Datenpunkte berechnen und hinzufügen
         self.add_data_points(competency_data, angular_axis)
@@ -277,10 +290,33 @@ class AnalysisWidget(QWidget):
             angle = i * angle_step
             if area_averages[area]['count'] > 0:
                 avg = area_averages[area]['sum'] / area_averages[area]['count']
-                self.radar_series.append(angle, avg)
+                # Werte transformieren: 1 ganz außen (8.0), 6 innen (1.0, nah zur Mitte)
+                # Stückweise lineare Transformation, die den Label-Positionen entspricht
+                if avg <= 1.0:
+                    transformed_value = 8.0  # Note 1 ganz außen
+                elif avg <= 2.0:
+                    # Note 1-2: Linear von 8.0 (Note 1) bis 6.5 (Note 2)
+                    transformed_value = 8.0 - 1.5 * (avg - 1.0)
+                elif avg <= 3.0:
+                    # Note 2-3: Linear von 6.5 (Note 2) bis 5.0 (Note 3)
+                    transformed_value = 6.5 - 1.5 * (avg - 2.0)
+                elif avg <= 4.0:
+                    # Note 3-4: Linear von 5.0 (Note 3) bis 4.0 (Note 4)
+                    transformed_value = 5.0 - 1.0 * (avg - 3.0)
+                elif avg <= 5.0:
+                    # Note 4-5: Linear von 4.0 (Note 4) bis 3.0 (Note 5)
+                    transformed_value = 4.0 - 1.0 * (avg - 4.0)
+                elif avg >= 6.0:
+                    # Note 6 (und schlechter) wird nah zur Mitte positioniert für stärkere Betonung
+                    transformed_value = 1.0
+                else:
+                    # Note 5-6: Linear von 3.0 (Note 5) bis 1.0 (Note 6)
+                    transformed_value = 3.0 - 2.0 * (avg - 5.0)
+                self.radar_series.append(angle, transformed_value)
                 angular_axis.append(area, angle)
 
         # Kreis schließen
         if self.radar_series.count() > 0:
             first_point = self.radar_series.at(0)
+            # Der y-Wert ist bereits transformiert
             self.radar_series.append(360.0, first_point.y())
