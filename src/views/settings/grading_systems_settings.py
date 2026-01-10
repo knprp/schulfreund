@@ -64,7 +64,7 @@ class GradingSystemsSettings(QWidget):
     def load_systems(self):
         """Lädt alle Notensysteme in die Tabelle"""
         try:
-            systems = self.parent.db.get_all_grading_systems()
+            systems = self.parent.controllers.grading_system.get_all_grading_systems()
             self.table.setRowCount(len(systems))
             
             for row, system in enumerate(systems):
@@ -102,7 +102,7 @@ class GradingSystemsSettings(QWidget):
             if current_row >= 0:
                 system_id = self.table.item(current_row, 0).\
                         data(Qt.ItemDataRole.UserRole)
-                system = self.parent.db.get_grading_system(system_id)
+                system = self.parent.controllers.grading_system.get_grading_system(system_id)
                 
                 if system:
                     # Berechne die Anzahl der Schritte
@@ -166,7 +166,7 @@ class GradingSystemsSettings(QWidget):
             
             if reply == QMessageBox.StandardButton.Yes:
                 try:
-                    self.parent.db.delete_grading_system(system_id)
+                    self.parent.controllers.grading_system.delete_grading_system(system_id)
                     self.load_systems()
                 except Exception as e:
                     QMessageBox.critical(

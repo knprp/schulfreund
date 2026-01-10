@@ -57,11 +57,9 @@ class AssessmentTemplateDialog(QDialog):
 
     def load_subjects(self):
         try:
-            # Hole alle Fächer aus der subjects-Tabelle
-            cursor = self.parent.db.execute(
-                "SELECT name FROM subjects ORDER BY name"
-            )
-            subjects = [row['name'] for row in cursor.fetchall()]
+            # Hole alle Fächer über Controller
+            subjects_data = self.parent.controllers.subject.get_all_subjects()
+            subjects = [s['name'] for s in subjects_data]
             self.subject.clear()  # Liste erst leeren
             self.subject.addItems(subjects)
         except Exception as e:
@@ -70,7 +68,7 @@ class AssessmentTemplateDialog(QDialog):
 
     def load_grading_systems(self):
         try:
-            systems = self.parent.db.get_all_grading_systems()
+            systems = self.parent.controllers.grading_system.get_all_grading_systems()
             for system in systems:
                 display_text = f"{system['name']} ({system['min_grade']}-{system['max_grade']})"
                 self.grading_system.addItem(display_text, system['id'])

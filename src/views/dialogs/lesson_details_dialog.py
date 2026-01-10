@@ -25,7 +25,7 @@ class LessonDetailsDialog(QDialog):
         QDialog.__init__(self)  
         self.main_window = main_window  # Dies ist die direkte Referenz zum Hauptfenster
         self.lesson_id = lesson_id
-        self.lesson = self.main_window.db.get_lesson(lesson_id)
+        self.lesson = self.main_window.controllers.lesson.get_lesson(lesson_id)
         self.setup_ui()
         self.load_data()
 
@@ -213,15 +213,8 @@ class LessonDetailsDialog(QDialog):
                     if layout_item and layout_item.layout():
                         self.remove_competency_row(layout_item.layout())
 
-                # Kompetenzen der Stunde laden
-                cursor = self.main_window.db.execute(
-                    """SELECT c.* FROM competencies c
-                    JOIN lesson_competencies lc ON c.id = lc.competency_id
-                    WHERE lc.lesson_id = ?
-                    ORDER BY c.area, c.description""",
-                    (self.lesson_id,)
-                )
-                competencies = cursor.fetchall()
+                # Kompetenzen der Stunde laden über Controller
+                competencies = self.main_window.controllers.lesson.get_competencies_for_lesson(self.lesson_id)
                 
                 # Erste ComboBox aktualisieren/befüllen wenn Kompetenzen vorhanden
                 if competencies:
@@ -266,7 +259,7 @@ class LessonDetailsDialog(QDialog):
             
             # Bei verlegten Stunden Zielstunde anzeigen
             if self.lesson.get('moved_to_lesson_id'):
-                moved_lesson = self.main_window.db.get_lesson(
+                moved_lesson = self.main_window.controllers.lesson.get_lesson(
                     self.lesson['moved_to_lesson_id']
                 )
                 if moved_lesson:
@@ -281,24 +274,21 @@ class LessonDetailsDialog(QDialog):
     def load_students(self):
         """Lädt die Schüler des Kurses in die Tabelle (ohne Anwesenheitsstatus)"""
         try:
-            semester = self.main_window.db.get_semester_dates()
+            semester = self.main_window.controllers.semester.get_semester_dates()
             if not semester:
                 raise ValueError("Kein aktives Semester gefunden")
 
             # Hole semester_id aus der Historie
-            cursor = self.main_window.db.execute(
-                """SELECT id FROM semester_history 
-                WHERE start_date = ? AND end_date = ?""",
-                (semester['semester_start'], semester['semester_end'])
+            semester_data = self.main_window.controllers.semester.get_semester_by_date(
+                semester['semester_start']
             )
-            semester_result = cursor.fetchone()
-            if not semester_result:
+            if not semester_data:
                 raise ValueError("Aktives Semester nicht in der Historie gefunden")
 
             # Hole alle Schüler des Kurses für das aktuelle Semester
-            students = self.main_window.db.get_students_by_course(
+            students = self.main_window.controllers.course.get_students_by_course(
                 self.lesson['course_id'], 
-                semester_result['id']
+                semester_data['id']
             )
 
             # Fülle die Tabelle
@@ -333,7 +323,7 @@ class LessonDetailsDialog(QDialog):
     def load_attendance_data(self):
         """Lädt und setzt die Anwesenheitsdaten für alle Schüler"""
         try:
-            absent_students = self.main_window.db.get_absent_students(self.lesson_id)
+            absent_students = self.main_window.controllers.assessment.get_absent_students(self.lesson_id)
             
             # Durchlaufe alle Zeilen der Tabelle
             for row in range(self.students_table.rowCount()):
@@ -354,14 +344,7 @@ class LessonDetailsDialog(QDialog):
         """Lädt die Assessment-Daten (Noten etc.) für alle Schüler"""
         try:
             # Hole exemplarisch die erste Note dieser Stunde für Assessment-Typ und Name
-            cursor = self.main_window.db.execute(
-                """SELECT DISTINCT assessment_type_id, topic 
-                FROM assessments 
-                WHERE lesson_id = ? 
-                LIMIT 1""",
-                (self.lesson_id,)
-            )
-            first_assessment = cursor.fetchone()
+            first_assessment = self.main_window.controllers.assessment.get_first_assessment_for_lesson(self.lesson_id)
             
             if first_assessment:
                 # Setze Assessment-Typ in ComboBox
@@ -385,7 +368,7 @@ class LessonDetailsDialog(QDialog):
                 remark_widget = self.students_table.cellWidget(row, self.COLUMN_REMARK)
 
                 try:
-                    assessment = self.main_window.db.get_lesson_assessment(
+                    assessment = self.main_window.controllers.assessment.get_assessment(
                         student_id, 
                         self.lesson_id
                     )                    
@@ -456,15 +439,15 @@ class LessonDetailsDialog(QDialog):
                                     if status == "moved" else None
             }
             
-            # Speichern
-            self.main_window.db.update_lesson(self.lesson_id, data)
+            # Speichern über Controller
+            self.main_window.controllers.lesson.update_lesson(self.lesson_id, data)
                 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Speichern: {str(e)}")
 
     def save_lesson_data(self):
         """Speichert die allgemeinen Stundendaten"""
-        self.main_window.db.update_lesson(
+        self.main_window.controllers.lesson.update_lesson(
             self.lesson_id,
             {
                 'topic': self.topic.text().strip(),
@@ -476,10 +459,10 @@ class LessonDetailsDialog(QDialog):
         """Speichert die Anwesenheitsdaten"""
         try:
             # Lösche zuerst alle bestehenden Abwesenheitseinträge
-            self.main_window.db.execute(
-                "DELETE FROM student_attendance WHERE lesson_id = ?",
-                (self.lesson_id,)
-            )
+            # (Lösche alle und füge dann nur Abwesende wieder hinzu)
+            absent_students = self.main_window.controllers.assessment.get_absent_students(self.lesson_id)
+            for student_id in absent_students:
+                self.main_window.controllers.assessment.mark_present(self.lesson_id, student_id)
 
             # Speichere neue Abwesenheitseinträge
             for row in range(self.students_table.rowCount()):
@@ -489,11 +472,7 @@ class LessonDetailsDialog(QDialog):
                 attendance_checkbox = self.students_table.cellWidget(row, self.COLUMN_ATTENDANCE)
                 if not attendance_checkbox.isChecked():
                     # Speichere nur Abwesenheiten
-                    self.main_window.db.execute(
-                        """INSERT INTO student_attendance 
-                        (student_id, lesson_id) VALUES (?, ?)""",
-                        (student_id, self.lesson_id)
-                    )
+                    self.main_window.controllers.assessment.mark_absent(self.lesson_id, student_id)
         except Exception as e:
             print(f"DEBUG Save - Error saving attendance: {str(e)}")
             raise
@@ -558,10 +537,8 @@ class LessonDetailsDialog(QDialog):
 
                 # Wenn eine leere Note ausgewählt wurde, lösche eine eventuell vorhandene Note
                 if not grade_str:
-                    self.main_window.db.execute(
-                        """DELETE FROM assessments 
-                        WHERE student_id = ? AND lesson_id = ?""",
-                        (student_id, self.lesson_id)
+                    self.main_window.controllers.assessment.delete_assessment(
+                        student_id, self.lesson_id
                     )
                     continue
 
@@ -583,7 +560,9 @@ class LessonDetailsDialog(QDialog):
                         'comment': comment
                     }
                     print(f"DEBUG Save - Complete assessment data: {assessment_data}")
-                    self.main_window.db.add_assessment(assessment_data)
+                    self.main_window.controllers.assessment.add_or_update_assessment(
+                        data=assessment_data
+                    )
 
             except Exception as e:
                 print(f"DEBUG Save - Error processing student {student_id}: {str(e)}")
@@ -593,11 +572,8 @@ class LessonDetailsDialog(QDialog):
         """Speichert die Kompetenzzuordnungen"""
         print("DEBUG Save - Saving competency data")
         try:
-            # Lösche bestehende Zuordnungen
-            self.main_window.db.execute(
-                "DELETE FROM lesson_competencies WHERE lesson_id = ?",
-                (self.lesson_id,)
-            )
+            # Lösche alle bestehenden Kompetenz-Zuordnungen über Controller
+            self.main_window.controllers.lesson.remove_all_competencies_from_lesson(self.lesson_id)
             
             # Speichere neue Zuordnungen
             for i in range(self.competencies_container.count()):
@@ -606,10 +582,8 @@ class LessonDetailsDialog(QDialog):
                     combo = layout_item.layout().itemAt(0).widget()
                     competency_id = combo.currentData()
                     if competency_id:
-                        self.main_window.db.execute(
-                            """INSERT INTO lesson_competencies 
-                            (lesson_id, competency_id) VALUES (?, ?)""",
-                            (self.lesson_id, competency_id)
+                        self.main_window.controllers.lesson.add_competency_to_lesson(
+                            self.lesson_id, competency_id
                         )
         except Exception as e:
             print(f"DEBUG Save - Error saving competencies: {str(e)}")
@@ -622,7 +596,7 @@ class LessonDetailsDialog(QDialog):
         
         try:
             # Hole das Notensystem für den Kurs
-            grading_system = self.main_window.db.get_course_grading_system(self.lesson['course_id'])
+            grading_system = self.main_window.controllers.assessment.get_grading_system_for_course(self.lesson['course_id'])
             if not grading_system:
                 QMessageBox.warning(self, "Warnung", 
                                 "Kein Notensystem für diesen Kurs definiert!")
@@ -798,7 +772,7 @@ class LessonDetailsDialog(QDialog):
             if subject:
                 combo.clear()
                 combo.addItem("", None)  # Leere Auswahl als erste Option
-                competencies = self.main_window.db.get_competencies_by_subject(subject)
+                competencies = self.main_window.controllers.competency.get_competencies_by_subject(subject)
                 for comp in competencies:
                     display_text = f"{comp['area']}: {comp['description']}"
                     combo.addItem(display_text, comp['id'])
@@ -846,7 +820,7 @@ class LessonDetailsDialog(QDialog):
             self.assessment_type.clear()
             self.assessment_type.addItem("", None)  # Leere Auswahl
             
-            types = self.main_window.db.get_assessment_types(self.lesson['course_id'])
+            types = self.main_window.controllers.assessment.get_assessment_types_for_course(self.lesson['course_id'])
             for type_data in types:
                 self.assessment_type.addItem(type_data['name'], type_data['id'])
                 
@@ -860,7 +834,7 @@ class LessonDetailsDialog(QDialog):
         combo.addItem("", None)  # Leere Auswahl
         
         try:
-            types = self.main_window.db.get_assessment_types(self.lesson['course_id'])
+            types = self.main_window.controllers.assessment.get_assessment_types_for_course(self.lesson['course_id'])
             for type_data in types:
                 combo.addItem(type_data['name'], type_data['id'])
                 

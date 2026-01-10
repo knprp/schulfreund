@@ -11,6 +11,18 @@ from PyQt6 import uic
 from pathlib import Path
 
 from src.database.db_manager import DatabaseManager
+from src.controllers import (
+    StudentController,
+    CourseController,
+    LessonController,
+    AssessmentController,
+    SettingsController,
+    SemesterController,
+    SubjectController,
+    CompetencyController,
+    GradingSystemController,
+    AssessmentTemplateController
+)
 from src.views.list_manager import ListManager
 from src.views.tabs.course_tab import CourseTab
 from src.views.tabs.student_tab import StudentTab
@@ -27,6 +39,19 @@ class SchoolManagement(QMainWindow):
         
         # Datenbank initialisieren
         self.db = DatabaseManager()
+
+        # Controller initialisieren
+        self.controllers = type('Controllers', (), {})()
+        self.controllers.student = StudentController(self.db)
+        self.controllers.course = CourseController(self.db)
+        self.controllers.lesson = LessonController(self.db)
+        self.controllers.assessment = AssessmentController(self.db)
+        self.controllers.settings = SettingsController(self.db)
+        self.controllers.semester = SemesterController(self.db)
+        self.controllers.subject = SubjectController(self.db)
+        self.controllers.competency = CompetencyController(self.db)
+        self.controllers.grading_system = GradingSystemController(self.db)
+        self.controllers.assessment_template = AssessmentTemplateController(self.db)
 
         # Holiday Manager initialisieren und Daten laden
         self.holiday_manager = HolidayManager(self.db)

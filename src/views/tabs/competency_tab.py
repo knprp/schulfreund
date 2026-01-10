@@ -53,7 +53,9 @@ class CompetencyTab(QWidget):
             dialog = CompetencyDialog(self)
             if dialog.exec():
                 data = dialog.get_data()
-                self.parent.db.add_competency(data)
+                self.parent.controllers.competency.add_competency(
+                    data['subject'], data['area'], data['description']
+                )
                 self.refresh_competencies()
                 self.parent.statusBar().showMessage(
                     f"Kompetenz wurde hinzugefügt", 3000
@@ -64,12 +66,14 @@ class CompetencyTab(QWidget):
     def edit_competency(self, comp_id):
         """Öffnet den Dialog zum Bearbeiten einer Kompetenz"""
         try:
-            comp = self.parent.db.get_competency(comp_id)
+            comp = self.parent.controllers.competency.get_competency(comp_id)
             if comp:
                 dialog = CompetencyDialog(self, comp)
                 if dialog.exec():
                     data = dialog.get_data()
-                    self.parent.db.update_competency(comp_id, data)
+                    self.parent.controllers.competency.update_competency(
+                        comp_id, data['subject'], data['area'], data['description']
+                    )
                     self.refresh_competencies()
                     self.parent.statusBar().showMessage(
                         f"Kompetenz wurde aktualisiert", 3000
@@ -89,7 +93,7 @@ class CompetencyTab(QWidget):
             )
             
             if msg.exec() == QMessageBox.StandardButton.Yes:
-                self.parent.db.delete_competency(comp_id)
+                self.parent.controllers.competency.delete_competency(comp_id)
                 self.refresh_competencies()
                 self.parent.statusBar().showMessage(
                     "Kompetenz wurde gelöscht", 3000
@@ -123,7 +127,7 @@ class CompetencyTab(QWidget):
         """Aktualisiert die Tabelle mit allen Kompetenzen"""
         try:
             self.competencies_table.setRowCount(0)
-            competencies = self.parent.db.get_all_competencies()
+            competencies = self.parent.controllers.competency.get_all_competencies()
             
             for comp in competencies:
                 row = self.competencies_table.rowCount()

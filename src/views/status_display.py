@@ -23,7 +23,7 @@ class StatusDisplay:
     def update_semester_display(self):
         """Aktualisiert die Anzeige des aktuellen Semesters in der Statusbar"""
         try:
-            semester = self.main_window.db.get_semester_dates()
+            semester = self.main_window.controllers.semester.get_semester_dates()
             
             if semester:
                 start = QDate.fromString(semester['semester_start'], "yyyy-MM-dd")

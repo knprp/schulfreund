@@ -7,7 +7,18 @@ class StudentDialog(QDialog):
     def __init__(self, parent=None, student=None, db=None):
         super().__init__(parent)
         self.student = student
-        self.db = db
+        # Unterstütze sowohl db als auch parent mit controllers
+        if hasattr(parent, 'controllers'):
+            self.main_window = parent
+        elif db:
+            self.db = db
+            # Versuche main_window zu finden
+            if hasattr(parent, 'parent') and hasattr(parent.parent, 'controllers'):
+                self.main_window = parent.parent
+            else:
+                self.main_window = None
+        else:
+            self.main_window = None
         self.setWindowTitle("Schüler bearbeiten" if student else "Schüler hinzufügen")
         self.setup_ui()
         
@@ -66,7 +77,10 @@ class StudentDialog(QDialog):
         """Lädt die verfügbaren Kurse in die Liste"""
         self.course_list.clear()
         try:
-            courses = self.db.get_all_courses()
+            if self.main_window:
+                courses = self.main_window.controllers.course.get_all_courses()
+            else:
+                courses = self.db.get_all_courses()
             for course in courses:
                 item = QListWidgetItem(course['name'])
                 item.setData(Qt.ItemDataRole.UserRole, course['id'])
@@ -116,7 +130,12 @@ class StudentDialog(QDialog):
             self.last_name.setText(self.student.last_name)
             
             # Aktuelle Kurse laden
-            current_courses = self.student.get_current_courses(self.db)
+            # Hole aktuelle Kurse über Controller wenn möglich
+            if self.main_window:
+                student_details = self.main_window.controllers.student.get_student_details(self.student.id)
+                current_courses = student_details.get('courses', []) if student_details else []
+            else:
+                current_courses = self.student.get_current_courses(self.db)
             if current_courses:
                 for i in range(self.course_list.count()):
                     item = self.course_list.item(i)

@@ -147,11 +147,11 @@ class SemesterSettings(QWidget):
             if self.check_semester_overlap(start_date, end_date):
                 raise ValueError("Das neue Semester überschneidet sich mit einem existierenden Semester")
                 
-            # Speichern als aktives Halbjahr
-            self.parent.db.save_semester_dates(start_date, end_date)
+            # Speichern als aktives Halbjahr über Controller
+            self.parent.controllers.semester.save_current_semester(start_date, end_date)
             
-            # Automatisch zur Historie hinzufügen
-            self.parent.db.save_semester_to_history(start_date, end_date, name)
+            # Automatisch zur Historie hinzufügen über Controller
+            self.parent.controllers.semester.semester_repo.save_to_history(start_date, end_date, name or None)
             
             self.refresh_history_list()
             self.parent.statusBar().showMessage("Halbjahr wurde gespeichert", 3000)
@@ -170,7 +170,7 @@ class SemesterSettings(QWidget):
         """Aktualisiert die Liste der Halbjahre in der Historie"""
         self.history_list.clear()
         try:
-            history = self.parent.db.get_semester_history()
+            history = self.parent.controllers.semester.get_semester_history()
             for semester in history:
                 display_text = semester['name'] if semester['name'] else f"{semester['start_date']} - {semester['end_date']}"
                 item = QListWidgetItem(display_text)
@@ -188,8 +188,10 @@ class SemesterSettings(QWidget):
             self.end_date.setDate(QDate.fromString(semester_data['end_date'], "yyyy-MM-dd"))
             self.semester_name.setText(semester_data.get('name', ''))
             
-            # Speichere das geladene Semester als aktives Semester
-            self.parent.db.save_semester_dates(semester_data['start_date'], semester_data['end_date'])
+            # Speichere das geladene Semester als aktives Semester über Controller
+            self.parent.controllers.semester.save_current_semester(
+                semester_data['start_date'], semester_data['end_date']
+            )
             
             # Aktualisiere die Anzeige über das StatusDisplay
             self.parent.status_display.update_semester_display()
@@ -210,7 +212,7 @@ class SemesterSettings(QWidget):
             
             if reply == QMessageBox.StandardButton.Yes:
                 try:
-                    self.parent.db.delete_semester_from_history(semester_data['id'])
+                    self.parent.controllers.semester.semester_repo.delete_from_history(semester_data['id'])
                     self.refresh_history_list()
                     self.parent.statusBar().showMessage("Halbjahr wurde aus der Historie gelöscht", 3000)
                 except Exception as e:
@@ -235,7 +237,7 @@ class SemesterSettings(QWidget):
     def load_semester_settings(self):
         """Lädt die Semester-Einstellungen aus der Datenbank"""
         try:
-            settings = self.parent.db.get_semester_dates()
+            settings = self.parent.controllers.semester.get_semester_dates()
             if settings:
                 self.start_date.setDate(QDate.fromString(settings['semester_start'], "yyyy-MM-dd"))
                 self.end_date.setDate(QDate.fromString(settings['semester_end'], "yyyy-MM-dd"))
@@ -249,7 +251,7 @@ class SemesterSettings(QWidget):
 
     def check_semester_overlap(self, start_date, end_date):
         """Prüft, ob sich ein Semester mit existierenden Semestern überschneidet"""
-        history = self.parent.db.get_semester_history()
+        history = self.parent.controllers.semester.get_semester_history()
         for semester in history:
             if (start_date <= semester['end_date'] and 
                 end_date >= semester['start_date']):

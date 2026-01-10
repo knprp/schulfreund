@@ -64,26 +64,8 @@ class SubjectTab(QWidget):
     def refresh_subjects(self):
         """Aktualisiert die Fächerliste"""
         try:
-            # Korrekter DB-Zugriff
-            subjects = self.main_window.db.execute("""
-                SELECT 
-                    s.name,
-                    COUNT(DISTINCT c.id) as course_count,
-                    att.name as template_name
-                FROM subjects s
-                LEFT JOIN courses c ON s.name = c.subject
-                LEFT JOIN assessment_type_templates att ON (
-                    att.subject = s.name AND
-                    att.id = (
-                        SELECT id FROM assessment_type_templates
-                        WHERE subject = s.name
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    )
-                )
-                GROUP BY s.name
-                ORDER BY s.name
-            """).fetchall()
+            # Lade Fächer über Controller
+            subjects = self.main_window.controllers.subject.get_all_subjects()
             
             self.table.setRowCount(len(subjects))
             for row, subject in enumerate(subjects):
@@ -105,22 +87,15 @@ class SubjectTab(QWidget):
                 'Neues Fach', 'Name des Fachs:')
             
             if ok and name.strip():
-                # Prüfe ob Fach bereits existiert
-                existing = self.main_window.db.execute(
-                    "SELECT name FROM subjects WHERE name = ?",
-                    (name.strip(),)
-                ).fetchone()
-                
-                if existing:
-                    QMessageBox.warning(self, "Warnung", 
-                                    "Dieses Fach existiert bereits!")
+                try:
+                    # Füge neues Fach über Controller hinzu
+                    self.main_window.controllers.subject.add_subject(name.strip())
+                except ValueError as e:
+                    QMessageBox.warning(self, "Warnung", str(e))
                     return
-                    
-                # Füge neues Fach ein
-                self.main_window.db.execute(
-                    "INSERT INTO subjects (name) VALUES (?)",
-                    (name.strip(),)
-                )
+                except Exception as e:
+                    QMessageBox.critical(self, "Fehler", f"Fehler beim Hinzufügen des Fachs: {str(e)}")
+                    return
                 
                 # Nach erfolgreichem Speichern
                 self.refresh_subjects()
@@ -144,26 +119,6 @@ class SubjectTab(QWidget):
                     
             subject = self.table.item(current, 0).text()
             
-            # Prüfe ob das Fach in Vorlagen verwendet wird
-            cursor = self.main_window.db.execute(
-                """SELECT COUNT(*) as count FROM assessment_type_templates 
-                WHERE subject = ?""", (subject,))
-            template_count = cursor.fetchone()['count']
-            
-            if template_count > 0:
-                QMessageBox.warning(self, "Warnung",
-                    f"Das Fach '{subject}' wird noch von {template_count} Vorlage(n) "
-                    "verwendet und kann nicht gelöscht werden!")
-                return
-                    
-            # Prüfe ob das Fach in Kursen verwendet wird    
-            courses = int(self.table.item(current, 1).text())
-            if courses > 0:
-                QMessageBox.warning(self, "Warnung",
-                    f"Das Fach '{subject}' wird noch von {courses} Kurs(en) verwendet "
-                    "und kann nicht gelöscht werden!")
-                return
-                    
             reply = QMessageBox.question(
                 self,
                 'Fach löschen',
@@ -173,10 +128,15 @@ class SubjectTab(QWidget):
             )
             
             if reply == QMessageBox.StandardButton.Yes:
-                self.main_window.db.execute(
-                    "DELETE FROM subjects WHERE name = ?",
-                    (subject,)
-                )
+                try:
+                    # Lösche Fach über Controller
+                    self.main_window.controllers.subject.delete_subject(subject)
+                except ValueError as e:
+                    QMessageBox.warning(self, "Warnung", str(e))
+                    return
+                except Exception as e:
+                    QMessageBox.critical(self, "Fehler", f"Fehler beim Löschen des Fachs: {str(e)}")
+                    return
                     
                 # Nach erfolgreichem Speichern
                 self.refresh_subjects()

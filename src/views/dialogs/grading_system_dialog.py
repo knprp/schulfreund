@@ -131,7 +131,7 @@ class GradingSystemDialog(QDialog):
             if not self.system_id:
                 return
                 
-            system = self.parent.db.get_grading_system(self.system_id)
+            system = self.parent.controllers.grading_system.get_grading_system(self.system_id)
             if system:
                 self.name.setText(system['name'])
                 self.min_grade.setValue(system['min_grade'])
@@ -152,9 +152,9 @@ class GradingSystemDialog(QDialog):
             self.tree.clear()
             
             if self.mode == "template":
-                items = self.parent.db.get_template_items(self.template_id)
+                items = self.parent.controllers.assessment_template.get_template_items(self.template_id)
             else:
-                items = self.parent.db.get_assessment_types(self.course_id)
+                items = self.parent.controllers.assessment.get_assessment_types_for_course(self.course_id)
                 
             # Erstelle Dictionary für schnellen Zugriff
             self.items_by_id = {item['id']: item for item in items}
@@ -186,14 +186,14 @@ class GradingSystemDialog(QDialog):
             data = dialog.get_data()
             try:
                 if self.mode == "template":
-                    type_id = self.parent.db.add_template_item(
+                    type_id = self.parent.controllers.assessment_template.add_template_item(
                         self.template_id,
                         data['name'],
                         None,
                         data['weight']
                     )
                 else:
-                    type_id = self.parent.db.add_assessment_type(
+                    type_id = self.parent.controllers.assessment.assessment_type_repo.add(
                         self.course_id,
                         data['name'],
                         None,
@@ -218,14 +218,14 @@ class GradingSystemDialog(QDialog):
                 parent_id = current.data(0, Qt.ItemDataRole.UserRole)
                 
                 if self.mode == "template":
-                    type_id = self.parent.db.add_template_item(
+                    type_id = self.parent.controllers.assessment_template.add_template_item(
                         self.template_id,
                         data['name'],
                         parent_id,
                         data['weight']
                     )
                 else:
-                    type_id = self.parent.db.add_assessment_type(
+                    type_id = self.parent.controllers.assessment.add_assessment_type(
                         self.course_id,
                         data['name'],
                         parent_id,
@@ -250,14 +250,14 @@ class GradingSystemDialog(QDialog):
             data = dialog.get_data()
             try:
                 if self.mode == "template":
-                    self.parent.db.update_template_item(
+                    self.parent.controllers.assessment_template.update_template_item(
                         type_id,
                         data['name'],
                         type_data['parent_item_id'],
                         data['weight']
                     )
                 else:
-                    self.parent.db.update_assessment_type(
+                    self.parent.controllers.assessment.update_assessment_type(
                         type_id,
                         data['name'],
                         type_data['parent_type_id'],
@@ -288,9 +288,9 @@ class GradingSystemDialog(QDialog):
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 if self.mode == "template":
-                    self.parent.db.delete_template_item(type_id)
+                    self.parent.controllers.assessment_template.delete_template_item(type_id)
                 else:
-                    self.parent.db.delete_assessment_type(type_id)
+                    self.parent.controllers.assessment.delete_assessment_type(type_id)
                 
                 self.load_types_data()
                 
@@ -371,9 +371,22 @@ class GradingSystemDialog(QDialog):
             }
 
             if self.system_id:
-                self.parent.db.update_grading_system(self.system_id, **data)
+                self.parent.controllers.grading_system.update_grading_system(
+                    self.system_id,
+                    data['name'],
+                    data['min_grade'],
+                    data['max_grade'],
+                    data['step_size'],
+                    data.get('description')
+                )
             else:
-                self.system_id = self.parent.db.add_grading_system(**data)
+                self.system_id = self.parent.controllers.grading_system.add_grading_system(
+                    data['name'],
+                    data['min_grade'],
+                    data['max_grade'],
+                    data['step_size'],
+                    data.get('description')
+                )
 
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Speichern: {str(e)}")

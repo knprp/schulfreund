@@ -42,22 +42,8 @@ class GradesWidget(QWidget):
         """Lädt die Einzelnoten eines Schülers"""
         try:
             self.current_student_id = student_id
-            cursor = self.main_window.db.execute(
-                """SELECT 
-                    a.date,
-                    c.name as course_name,
-                    at.name as type_name,
-                    a.grade,
-                    COALESCE(a.topic, '') as topic,
-                    COALESCE(a.comment, '') as comment
-                FROM assessments a
-                JOIN courses c ON a.course_id = c.id
-                JOIN assessment_types at ON a.assessment_type_id = at.id
-                WHERE a.student_id = ?
-                ORDER BY a.date DESC""",
-                (student_id,)
-            )
-            grades = cursor.fetchall()
+            # Lade Noten über Controller
+            grades = self.main_window.controllers.student.get_student_assessments(student_id)
             
             self.grades_table.setRowCount(len(grades))
             for row, grade in enumerate(grades):
@@ -117,19 +103,15 @@ class GradesWidget(QWidget):
         """Öffnet den LessonDetailsDialog für die ausgewählte Note"""
         try:
             row = item.row()
-            cursor = self.main_window.db.execute(
-                """SELECT lesson_id 
-                FROM assessments
-                WHERE student_id = ? 
-                AND date = ?
-                LIMIT 1""",
-                (self.current_student_id, self.grades_table.item(row, 0).text())
+            date = self.grades_table.item(row, 0).text()
+            # Hole lesson_id über Controller
+            lesson_id = self.main_window.controllers.student.get_lesson_id_for_assessment(
+                self.current_student_id, date
             )
-            result = cursor.fetchone()
             
-            if result and result['lesson_id']:
+            if lesson_id:
                 from src.views.dialogs.lesson_details_dialog import LessonDetailsDialog
-                dialog = LessonDetailsDialog(self.main_window, result['lesson_id'])
+                dialog = LessonDetailsDialog(self.main_window, lesson_id)
                 # Zum Schüler-Tab wechseln
                 dialog.tab_widget.setCurrentIndex(1)
                 if dialog.exec():
