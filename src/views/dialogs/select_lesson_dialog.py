@@ -69,12 +69,10 @@ class SelectLessonDialog(QDialog):
                 QMessageBox.warning(self, "Fehler", "Kein Kurs ausgewählt.")
                 return
             
-            # Hole alle Stunden des Kurses
             # Hole alle Stunden des Kurses über Controller
-            # TODO: Methode get_lessons_by_course im LessonController hinzufügen
-            # Für jetzt: Hole alle und filtere nach course_id
-            all_lessons = self.parent.controllers.lesson.get_all_lessons()
-            course_lessons = [l for l in all_lessons if l.get('course_id') == self.course_id]
+            course_lessons = self.parent.controllers.lesson.get_lessons_by_course(
+                self.course_id
+            )
             
             # Sortiere nach Datum und Zeit
             course_lessons.sort(key=lambda x: (x.get('date', ''), x.get('time', '')))

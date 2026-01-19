@@ -8,9 +8,14 @@ class ImportCsvStudentsDialog(QDialog):
     def __init__(self, parent=None, db=None):
         super().__init__(parent)
         self.parent = parent
-        if db is None:
-            raise ValueError("Keine Datenbankverbindung übergeben")
         self.db = db
+        # Controller müssen verfügbar sein
+        if hasattr(parent, 'parent') and hasattr(parent.parent, 'controllers'):
+            self.main_window = parent.parent
+        elif hasattr(parent, 'controllers'):
+            self.main_window = parent
+        else:
+            raise ValueError("ImportCsvStudentsDialog benötigt Zugriff auf Controller.")
         self.course_id = parent.course.id
         self.setWindowTitle("Schüler aus CSV importieren")
         self.setMinimumWidth(800)
@@ -112,39 +117,17 @@ class ImportCsvStudentsDialog(QDialog):
 
     def validate_and_accept(self):
         try:
-            # Hole main_window falls verfügbar
-            main_window = None
-            if hasattr(self.parent, 'parent') and hasattr(self.parent.parent, 'controllers'):
-                main_window = self.parent.parent
-            elif hasattr(self.parent, 'controllers'):
-                main_window = self.parent
-            
-            if main_window:
-                current_semester = main_window.controllers.semester.get_semester_dates()
-                if not current_semester:
-                    raise ValueError("Kein aktives Semester gefunden")
+            current_semester = self.main_window.controllers.semester.get_semester_dates()
+            if not current_semester:
+                raise ValueError("Kein aktives Semester gefunden")
 
-                # Hole semester_id aus der Historie
-                semester_data = main_window.controllers.semester.get_semester_by_date(
-                    current_semester['semester_start']
-                )
-                if not semester_data:
-                    raise ValueError("Aktives Semester nicht in der Historie gefunden")
-                semester = {'id': semester_data['id']}
-            else:
-                current_semester = self.db.get_semester_dates()
-                if not current_semester:
-                    raise ValueError("Kein aktives Semester gefunden")
-
-                # Hole semester_id aus der Historie für das aktuelle Semester
-                cursor = self.db.execute(
-                    """SELECT id FROM semester_history 
-                    WHERE start_date = ? AND end_date = ?""",
-                    (current_semester['semester_start'], current_semester['semester_end'])
-                )
-                semester = cursor.fetchone()
-                if not semester:
-                    raise ValueError("Aktives Semester nicht in der Historie gefunden")
+            # Hole semester_id aus der Historie
+            semester_data = self.main_window.controllers.semester.get_semester_by_date(
+                current_semester['semester_start']
+            )
+            if not semester_data:
+                raise ValueError("Aktives Semester nicht in der Historie gefunden")
+            semester = {'id': semester_data['id']}
 
             students_to_import = []
             for row in range(self.preview_table.rowCount()):
@@ -162,28 +145,12 @@ class ImportCsvStudentsDialog(QDialog):
 
             # Importiere Schüler und füge sie zum Kurs hinzu
             for student in students_to_import:
-                if main_window:
-                    # Verwende Controller
-                    student_id = main_window.controllers.student.student_repo.add(
-                        student['first_name'], student['last_name']
-                    )
-                    main_window.controllers.student.add_student_to_course(
-                        student_id, self.course_id, semester['id']
-                    )
-                else:
-                    # Fallback auf direkte DB-Zugriffe
-                    cursor = self.db.execute(
-                        "INSERT INTO students (first_name, last_name) VALUES (?, ?)",
-                        (student['first_name'], student['last_name'])
-                    )
-                    student_id = cursor.lastrowid
-
-                    self.db.execute(
-                        """INSERT INTO student_courses 
-                        (student_id, course_id, semester_id)
-                        VALUES (?, ?, ?)""",
-                        (student_id, self.course_id, semester['id'])
-                    )
+                student_id = self.main_window.controllers.student.create_student(
+                    student['first_name'], student['last_name']
+                )
+                self.main_window.controllers.student.add_student_to_course(
+                    student_id, self.course_id, semester['id']
+                )
 
             self.accept()
 

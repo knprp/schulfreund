@@ -208,6 +208,65 @@ class StudentController(BaseController):
         """, (student_id,))
         rows = cursor.fetchall()
         return [dict(row) for row in rows] if rows else []
+
+    def get_student_grades(self, student_id: int, timeframe: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Holt alle Noten eines Schülers mit optionalem Zeitrahmen.
+        
+        Args:
+            student_id: ID des Schülers
+            timeframe: Optional, Startdatum (YYYY-MM-DD)
+            
+        Returns:
+            Liste von Dictionaries mit Notendaten
+        """
+        query = """
+            SELECT 
+                g.*,
+                l.date as lesson_date,
+                l.subject,
+                c.area as competency_area,
+                c.description as competency_description
+            FROM grades g
+            JOIN lessons l ON g.lesson_id = l.id
+            JOIN competencies c ON g.competency_id = c.id
+            WHERE g.student_id = ?
+        """
+        params = [student_id]
+        if timeframe:
+            query += " AND l.date >= ?"
+            params.append(timeframe)
+        query += " ORDER BY l.date DESC"
+        cursor = self.db.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_student_grade_history(self, student_id: int, course_id: int,
+                                  assessment_type_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Holt die Notenentwicklung eines Schülers.
+        
+        Args:
+            student_id: ID des Schülers
+            course_id: ID des Kurses
+            assessment_type_id: Optional, für einen bestimmten Bewertungstyp
+            
+        Returns:
+            Liste von Noten, chronologisch sortiert
+        """
+        query = """
+            SELECT 
+                a.*,
+                t.name as type_name,
+                t.weight as type_weight
+            FROM assessments a
+            JOIN assessment_types t ON a.assessment_type_id = t.id
+            WHERE a.student_id = ? AND a.course_id = ?
+        """
+        params = [student_id, course_id]
+        if assessment_type_id:
+            query += " AND a.assessment_type_id = ?"
+            params.append(assessment_type_id)
+        query += " ORDER BY a.date"
+        cursor = self.db.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
     
     def get_student_assessments(self, student_id: int) -> List[Dict[str, Any]]:
         """Holt alle Einzelnoten eines Schülers.

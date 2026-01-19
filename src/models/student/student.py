@@ -75,40 +75,6 @@ class Student:
         result = cursor.fetchone()
         print(f"DEBUG: Anzahl Einträge in student_courses für ID {self.id}: {result['count']}")
 
-    # def get_grades(self, db) -> list:
-    #     """Holt alle Noten des Schülers."""
-    #     if not self.id:
-    #         raise ValueError("Schüler hat keine ID")
-            
-    #     cursor = db.execute('''
-    #         SELECT g.*, l.subject, l.date, c.area, c.description
-    #         FROM grades g
-    #         JOIN lessons l ON g.lesson_id = l.id
-    #         JOIN competencies c ON g.competency_id = c.id
-    #         WHERE g.student_id = ?
-    #         ORDER BY l.date DESC
-    #     ''', (self.id,))
-    #     return [dict(row) for row in cursor.fetchall()]
-
-    # def get_grade_statistics(self, db) -> dict:
-    #     """Berechnet Notenstatistiken für den Schüler."""
-    #     if not self.id:
-    #         raise ValueError("Schüler hat keine ID")
-            
-    #     cursor = db.execute('''
-    #         SELECT 
-    #             l.subject,
-    #             COUNT(*) as count,
-    #             ROUND(AVG(g.grade * g.weight), 2) as weighted_average,
-    #             MIN(g.grade) as best_grade,
-    #             MAX(g.grade) as worst_grade
-    #         FROM grades g
-    #         JOIN lessons l ON g.lesson_id = l.id
-    #         WHERE g.student_id = ?
-    #         GROUP BY l.subject
-    #     ''', (self.id,))
-    #     return {row['subject']: dict(row) for row in cursor.fetchall()}
-
     def add_remark(self, db, text: str, type: str = "general", 
                 lesson_id: Optional[int] = None) -> StudentRemark:
         """Fügt eine neue Bemerkung für den Schüler hinzu."""
@@ -193,7 +159,7 @@ class Student:
             raise ValueError("Schüler hat keine ID")
         
         # Aktives Halbjahr aus den Einstellungen holen
-        semester = db.get_semester_dates()
+        semester = db.semesters.get_current()
         if not semester:
             return []
             

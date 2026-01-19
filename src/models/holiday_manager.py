@@ -37,7 +37,7 @@ class HolidayManager:
         errors = []
         
         try:
-            self.db.clear_public_holidays(year, self.state)
+            self.db.holidays.clear_public_by_year(year, self.state)
             
             # Versuche beide APIs zu aktualisieren
             try:
@@ -57,7 +57,7 @@ class HolidayManager:
                 error_msg = "\n".join([f"{src}: {str(err)}" for src, err in errors])
                 raise HolidayAPIError(f"Beide APIs nicht erreichbar:\n{error_msg}")
 
-            self.db.update_lesson_status_for_holidays()
+            self.db.holidays.update_lesson_status_for_holidays()
                 
         except Exception as e:
             self.logger.error(f"Kritischer Fehler beim Update: {str(e)}")
@@ -96,7 +96,7 @@ class HolidayManager:
                         
                     current_date = start_date
                     while current_date <= end_date:
-                        self.db.add_public_holiday(
+                        self.db.holidays.add_public(
                             date=current_date.strftime("%Y-%m-%d"),
                             name=name,
                             type='vacation_day',
@@ -153,7 +153,7 @@ class HolidayManager:
                         self.logger.warning(f"Feiertag ohne Datum: {name}")
                         continue
                         
-                    self.db.add_public_holiday(
+                    self.db.holidays.add_public(
                         date=data['datum'],
                         name=name,
                         type='holiday',
@@ -176,7 +176,7 @@ class HolidayManager:
     def get_holidays_for_week(self, week_start: datetime) -> List[Dict]:
         """Holt alle Feiertage/Ferientage für eine Woche."""
         week_end = week_start + timedelta(days=6)
-        return self.db.get_holidays_by_date_range(
+        return self.db.holidays.get_by_date_range(
             week_start.strftime("%Y-%m-%d"),
             week_end.strftime("%Y-%m-%d")
         )
@@ -216,7 +216,7 @@ class HolidayManager:
     def _get_loaded_years(self) -> List[int]:
         """Ermittelt welche Jahre bereits in der Datenbank sind."""
         try:
-            loaded_holidays = self.db.get_public_holidays_by_year(
+            loaded_holidays = self.db.holidays.get_public_by_year(
                 year=datetime.now().year,
                 state=self.state
             )
