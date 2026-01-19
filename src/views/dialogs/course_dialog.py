@@ -21,6 +21,7 @@ class CourseDialog(QDialog):
         self.course = course
         # Zugriff über parent (parent ist Tab, parent.parent ist MainWindow)
         self.main_window = parent.parent
+        self.controllers = self.main_window.controllers
         self.selected_student_ids = []
         self.color = QColor('#FFFFFF')
         

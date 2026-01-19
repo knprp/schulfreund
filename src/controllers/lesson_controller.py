@@ -201,3 +201,14 @@ class LessonController(BaseController):
             Liste von Dictionaries mit Stundendaten
         """
         return self.lesson_repo.get_all()
+
+    def get_lessons_by_course(self, course_id: int) -> List[Dict[str, Any]]:
+        """Holt alle Unterrichtsstunden eines Kurses.
+        
+        Args:
+            course_id: ID des Kurses
+            
+        Returns:
+            Liste von Dictionaries mit Stundendaten
+        """
+        return self.lesson_repo.get_by_course(course_id)

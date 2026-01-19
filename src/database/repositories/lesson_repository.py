@@ -157,6 +157,21 @@ class LessonRepository(BaseRepository):
             "SELECT * FROM lessons ORDER BY date, time"
         )
         return self._dicts_from_rows(cursor.fetchall())
+
+    def get_by_course(self, course_id: int) -> List[Dict[str, Any]]:
+        """Holt alle Unterrichtsstunden eines Kurses.
+        
+        Args:
+            course_id: ID des Kurses
+            
+        Returns:
+            Liste von Dictionaries mit Stundendaten, sortiert nach Datum und Zeit
+        """
+        cursor = self.execute(
+            "SELECT * FROM lessons WHERE course_id = ? ORDER BY date, time",
+            (course_id,)
+        )
+        return self._dicts_from_rows(cursor.fetchall())
     
     def get_next_by_course(self, date: str) -> List[Dict[str, Any]]:
         """Holt für jeden Kurs die nächste anstehende Stunde nach einem Datum.

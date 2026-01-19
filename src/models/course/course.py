@@ -30,7 +30,7 @@ class Course:
 
         # Wenn Template ausgewählt wurde, Bewertungstypen erstellen
         if template_id:
-            db.create_assessment_types_from_template(course_id, template_id)
+            db.assessment_types.create_from_template(course_id, template_id)
 
         return Course(course_id, name, type, subject, description, color, template_id)
 

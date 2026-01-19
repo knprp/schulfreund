@@ -196,6 +196,27 @@ class CourseController(BaseController):
             Liste von Dictionaries mit Kursdaten
         """
         return self.course_repo.get_by_semester(semester_id)
+
+    def get_courses_for_semester_dates(self, start_date: str, end_date: str) -> List[Dict[str, Any]]:
+        """Holt alle Kurse, die in einem bestimmten Semester aktiv sind.
+        
+        Args:
+            start_date: Startdatum des Semesters (YYYY-MM-DD)
+            end_date: Enddatum des Semesters (YYYY-MM-DD)
+            
+        Returns:
+            Liste von Dictionaries mit Kurs-ID und Kurs-Name
+        """
+        cursor = self.course_repo.execute(
+            """SELECT DISTINCT c.id, c.name 
+            FROM courses c
+            JOIN student_courses sc ON c.id = sc.course_id
+            JOIN semester_history sh ON sc.semester_id = sh.id
+            WHERE sh.start_date = ? AND sh.end_date = ?
+            ORDER BY c.name""",
+            (start_date, end_date)
+        )
+        return self.course_repo._dicts_from_rows(cursor.fetchall())
     
     def get_students_by_course(self, course_id: int, semester_id: int) -> List[Dict[str, Any]]:
         """Holt alle Schüler eines Kurses für ein bestimmtes Semester.

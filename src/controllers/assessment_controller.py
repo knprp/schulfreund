@@ -242,3 +242,169 @@ class AssessmentController(BaseController):
             Dictionary mit Notensystemdaten oder None
         """
         return self.grading_system_repo.get_by_course(course_id)
+
+    def validate_assessment_input(self, student_id: int, course_id: int,
+                                  assessment_type_id: int, grade: float,
+                                  date: str) -> None:
+        """Validiert die Eingabedaten für eine neue Note.
+        
+        Args:
+            student_id: ID des Schülers
+            course_id: ID des Kurses
+            assessment_type_id: ID des Bewertungstyps
+            grade: Note
+            date: Datum im Format 'YYYY-MM-DD'
+        """
+        # 1. Prüfe ob der Schüler im Kurs ist
+        cursor = self.db.execute(
+            """SELECT semester_id, start_date, end_date 
+               FROM student_courses sc
+               JOIN semester_history sh ON sc.semester_id = sh.id
+               WHERE student_id = ? AND course_id = ?
+               AND start_date <= ? AND end_date >= ?""",
+            (student_id, course_id, date, date)
+        )
+        if not cursor.fetchone():
+            raise ValueError(
+                f"Der Schüler (ID: {student_id}) ist zu diesem Zeitpunkt "
+                f"nicht im Kurs (ID: {course_id})"
+            )
+
+        # 2. Prüfe ob der Bewertungstyp zum Kurs gehört
+        cursor = self.db.execute(
+            "SELECT id FROM assessment_types WHERE id = ? AND course_id = ?",
+            (assessment_type_id, course_id)
+        )
+        if not cursor.fetchone():
+            raise ValueError(
+                f"Der Bewertungstyp (ID: {assessment_type_id}) gehört "
+                f"nicht zum Kurs (ID: {course_id})"
+            )
+
+        # 3. Prüfe ob die Note zum Notensystem passt
+        cursor = self.db.execute(
+            """SELECT gs.* 
+               FROM assessment_type_templates att
+               JOIN grading_systems gs ON att.grading_system_id = gs.id
+               WHERE att.id = ?""",
+            (assessment_type_id,)
+        )
+        grading_system = cursor.fetchone()
+        if grading_system:
+            if not self.grading_system_repo.validate_grade(grade, grading_system['id']):
+                raise ValueError(
+                    f"Die Note {grade} ist im Notensystem "
+                    f"'{grading_system['name']}' nicht gültig"
+                )
+
+    def get_assessment_statistics(self, course_id: int,
+                                  start_date: Optional[str] = None,
+                                  end_date: Optional[str] = None) -> Dict[str, Any]:
+        """Berechnet verschiedene Statistiken für einen Kurs.
+        
+        Args:
+            course_id: ID des Kurses
+            start_date: Optional, Startdatum (YYYY-MM-DD)
+            end_date: Optional, Enddatum (YYYY-MM-DD)
+            
+        Returns:
+            Dict mit statistischen Werten
+        """
+        query = """
+            SELECT 
+                COUNT(*) as total_count,
+                AVG(a.grade) as average_grade,
+                MIN(a.grade) as best_grade,
+                MAX(a.grade) as worst_grade,
+                a.assessment_type_id,
+                t.name as type_name
+            FROM assessments a
+            JOIN assessment_types t ON a.assessment_type_id = t.id
+            WHERE a.course_id = ?
+        """
+        params = [course_id]
+        if start_date:
+            query += " AND date >= ?"
+            params.append(start_date)
+        if end_date:
+            query += " AND date <= ?"
+            params.append(end_date)
+        query += " GROUP BY assessment_type_id"
+        cursor = self.db.execute(query, tuple(params))
+        type_stats = {row['type_name']: dict(row) for row in cursor.fetchall()}
+
+        total_query = """
+            SELECT 
+                COUNT(*) as total_count,
+                AVG(a.grade) as average_grade,
+                MIN(a.grade) as best_grade,
+                MAX(a.grade) as worst_grade
+            FROM assessments a
+            WHERE a.course_id = ?
+        """
+        total_params = [course_id]
+        if start_date:
+            total_query += " AND date >= ?"
+            total_params.append(start_date)
+        if end_date:
+            total_query += " AND date <= ?"
+            total_params.append(end_date)
+        cursor = self.db.execute(total_query, tuple(total_params))
+        total_stats = dict(cursor.fetchone())
+
+        return {
+            'total': total_stats,
+            'by_type': type_stats
+        }
+
+    def get_course_grade_export(self, course_id: int) -> Dict[str, Any]:
+        """Erstellt eine exportierbare Übersicht aller Noten eines Kurses.
+        
+        Args:
+            course_id: ID des Kurses
+            
+        Returns:
+            Dict mit Kursinformationen und Notendaten
+        """
+        cursor = self.db.execute(
+            "SELECT * FROM courses WHERE id = ?",
+            (course_id,)
+        )
+        course = dict(cursor.fetchone())
+
+        types = self.assessment_type_repo.get_by_course(course_id)
+
+        cursor = self.db.execute(
+            """SELECT DISTINCT s.* 
+               FROM students s
+               JOIN student_courses sc ON s.id = sc.student_id
+               WHERE sc.course_id = ?
+               ORDER BY s.last_name, s.first_name""",
+            (course_id,)
+        )
+        students = [dict(row) for row in cursor.fetchall()]
+
+        cursor = self.db.execute(
+            """SELECT 
+                   a.*,
+                   t.name as type_name,
+                   s.last_name,
+                   s.first_name
+               FROM assessments a
+               JOIN assessment_types t ON a.assessment_type_id = t.id
+               JOIN students s ON a.student_id = s.id
+               WHERE a.course_id = ?
+               ORDER BY s.last_name, s.first_name, a.date""",
+            (course_id,)
+        )
+        grades = [dict(row) for row in cursor.fetchall()]
+
+        statistics = self.get_assessment_statistics(course_id)
+
+        return {
+            'course': course,
+            'types': types,
+            'students': students,
+            'grades': grades,
+            'statistics': statistics
+        }
